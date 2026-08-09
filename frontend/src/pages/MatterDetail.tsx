@@ -50,10 +50,10 @@ export function MatterDetailPage() {
         description={`${m.internalNumber}${m.caseNumber ? ` · ${m.caseNumber}` : ""}`}
         action={
           <div className="flex gap-2">
-            <Button className="bg-white text-slate-800 ring-1 ring-slate-200">
+            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800">
               <Archive size={16} className="mr-2 inline" />
               Encerrar
-            </Button>
+            </button>
             <Button>Editar Matter</Button>
           </div>
         }

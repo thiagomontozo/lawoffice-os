@@ -59,6 +59,26 @@ flowchart TD
 
 See [architecture](docs/architecture.md) and [domain model](docs/domain-model.md).
 
+## Interface Preview
+
+The screenshots below use fictional demonstration data. No real client, legal or personal information is included.
+
+### Command Center
+
+![LawOffice OS Command Center](docs/images/command-center.png)
+
+### Matter workspace
+
+![LawOffice OS Matter detail](docs/images/matter-detail.png)
+
+### Document Center
+
+![LawOffice OS Document Center](docs/images/document-center.png)
+
+### Client portal administration
+
+![LawOffice OS client portal administration](docs/images/client-portal-management.png)
+
 ## Technology Stack
 
 - Backend: Go, Chi, pgx, `slog`, `context.Context`
@@ -219,7 +239,7 @@ The repository includes multi-stage backend/frontend Dockerfiles and a Compose t
 
 ## Testing and CI
 
-The first reliability milestone adds:
+The repository validation includes:
 
 - Go unit tests for password/session handling, configuration and local storage safety;
 - PostgreSQL integration coverage for firm isolation, restricted Matter access and document authorization;
@@ -311,7 +331,7 @@ AI is deliberately not implemented. A future Matter AI Workspace must never retr
 
 ## Contributing
 
-Open an issue before large changes. Keep the modular monolith, firm-scoped queries, backend authorization and documentation aligned. Tests and CI are the first recommended contribution milestone.
+Open an issue before large changes. Keep the modular monolith, firm-scoped queries, backend authorization, tests and documentation aligned. New behavior should include proportionate automated coverage and pass both CI and security workflows.
 
 ## License
 

@@ -1,5 +1,7 @@
 # Architecture
 
+Rendered views of the main application surfaces are available in [Frontend interface](interface.md).
+
 ## Modular monolith
 
 LawOffice OS is one deployable Go API organized by domain boundaries rather than a network of microservices. Identity, branding, clients, Matters, documents, deadlines, workflow, archive, search, finance, portal and audit share one transaction boundary and PostgreSQL source of truth. This keeps V0.1 operationally understandable while preserving module-level seams.

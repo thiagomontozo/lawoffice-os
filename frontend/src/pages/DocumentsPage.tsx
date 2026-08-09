@@ -131,7 +131,7 @@ export function DocumentsPage() {
               onClick={() => void showRetention()}
               className="rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
             >
-              RetenÃ§Ã£o
+              Retenção
             </button>
             <Button onClick={() => setUploadOpen(true)}>
               <FilePlus2 size={16} className="mr-2 inline" />
@@ -331,13 +331,13 @@ export function DocumentsPage() {
       </Modal>
       <Modal
         open={retentionOpen}
-        title="Documentos em retenÃ§Ã£o"
+        title="Documentos em retenção"
         onClose={() => setRetentionOpen(false)}
       >
         {deleted.length === 0 ? (
           <Empty
             title="Nenhum documento retido"
-            description="Documentos removidos aparecem aqui e mantÃªm todas as versÃµes."
+            description="Documentos removidos aparecem aqui e mantêm todas as versões."
           />
         ) : (
           <div className="space-y-3">
@@ -352,7 +352,7 @@ export function DocumentsPage() {
                     Removido em{" "}
                     {document.deletedAt
                       ? new Date(document.deletedAt).toLocaleString("pt-BR")
-                      : "data indisponÃ­vel"}
+                      : "data indisponível"}
                   </p>
                 </div>
                 <button
