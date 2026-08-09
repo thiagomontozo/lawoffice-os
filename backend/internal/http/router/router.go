@@ -63,10 +63,13 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config) http.H
 		a.With(appmw.Permission("clients.read", handlers.WriteError)).Post("/api/v1/conflicts/check", h.ConflictCheck)
 
 		a.With(appmw.Permission("document.read", handlers.WriteError)).Get("/api/v1/documents", h.Documents)
+		a.With(appmw.Permission("document.delete", handlers.WriteError)).Get("/api/v1/documents/deleted", h.DeletedDocuments)
 		a.With(appmw.Permission("document.read", handlers.WriteError)).Get("/api/v1/documents/{id}/download", h.DownloadDocument)
 		a.With(appmw.Permission("document.read", handlers.WriteError)).Get("/api/v1/documents/{id}/versions", h.Versions)
 		a.With(appmw.Permission("document.upload", handlers.WriteError)).Post("/api/v1/documents", h.UploadDocument)
 		a.With(appmw.Permission("document.upload", handlers.WriteError)).Post("/api/v1/documents/{id}/versions", h.AddVersion)
+		a.With(appmw.Permission("document.delete", handlers.WriteError)).Delete("/api/v1/documents/{id}", h.DeleteDocument)
+		a.With(appmw.Permission("document.delete", handlers.WriteError)).Post("/api/v1/documents/{id}/restore", h.RestoreDocument)
 
 		a.With(appmw.Permission("deadline.read", handlers.WriteError)).Get("/api/v1/deadlines", h.Deadlines)
 		a.With(appmw.Permission("deadline.manage", handlers.WriteError)).Post("/api/v1/deadlines", h.CreateDeadline)

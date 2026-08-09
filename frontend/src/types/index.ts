@@ -77,6 +77,7 @@ export type DocumentItem = {
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
+  deletedAt?: string;
   clientVisible: boolean;
 };
 export type MatterEvent = {

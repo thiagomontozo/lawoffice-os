@@ -121,19 +121,20 @@ type Note struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 type Document struct {
-	ID               string    `json:"id"`
-	MatterID         *string   `json:"matterId,omitempty"`
-	ClientID         *string   `json:"clientId,omitempty"`
-	Title            string    `json:"title"`
-	Description      *string   `json:"description,omitempty"`
-	Category         string    `json:"category"`
-	VersionNumber    int       `json:"versionNumber"`
-	OriginalFileName string    `json:"originalFileName"`
-	MimeType         string    `json:"mimeType"`
-	SizeBytes        int64     `json:"sizeBytes"`
-	Checksum         string    `json:"checksum"`
-	ClientVisible    bool      `json:"clientVisible"`
-	CreatedAt        time.Time `json:"createdAt"`
+	ID               string     `json:"id"`
+	MatterID         *string    `json:"matterId,omitempty"`
+	ClientID         *string    `json:"clientId,omitempty"`
+	Title            string     `json:"title"`
+	Description      *string    `json:"description,omitempty"`
+	Category         string     `json:"category"`
+	VersionNumber    int        `json:"versionNumber"`
+	OriginalFileName string     `json:"originalFileName"`
+	MimeType         string     `json:"mimeType"`
+	SizeBytes        int64      `json:"sizeBytes"`
+	Checksum         string     `json:"checksum"`
+	ClientVisible    bool       `json:"clientVisible"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	DeletedAt        *time.Time `json:"deletedAt,omitempty"`
 }
 type DocumentVersion struct {
 	ID               string    `json:"id"`

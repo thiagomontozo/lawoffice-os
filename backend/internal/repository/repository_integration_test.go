@@ -107,6 +107,18 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	if _, _, err = store.DocumentVersion(ctx, ownerA.FirmID, other.ID, doc.ID, nil); err != nil {
 		t.Fatalf("authorized document lookup failed: %v", err)
 	}
+	if err = store.SoftDeleteDocument(ctx, ownerB.FirmID, ownerB.ID, doc.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-firm document deletion should fail, got %v", err)
+	}
+	if err = store.SoftDeleteDocument(ctx, ownerA.FirmID, ownerA.ID, doc.ID); err != nil {
+		t.Fatalf("soft delete failed: %v", err)
+	}
+	if _, _, err = store.DocumentVersion(ctx, ownerA.FirmID, ownerA.ID, doc.ID, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted document should be hidden, got %v", err)
+	}
+	if err = store.RestoreDocument(ctx, ownerA.FirmID, doc.ID); err != nil {
+		t.Fatalf("restore failed: %v", err)
+	}
 	task, err := store.CreateTask(ctx, ownerA.FirmID, ownerA.ID, domain.Task{MatterID: &matter.ID, Title: "Review restricted advice", Status: "todo", Priority: "normal"})
 	if err != nil {
 		t.Fatal(err)

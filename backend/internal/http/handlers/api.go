@@ -642,6 +642,15 @@ func (h *Handler) Documents(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"items": x})
 }
+func (h *Handler) DeletedDocuments(w http.ResponseWriter, r *http.Request) {
+	u := user(r)
+	items, err := h.Store.DeletedDocuments(r.Context(), u.FirmID, u.ID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
 func (h *Handler) UploadDocument(w http.ResponseWriter, r *http.Request) {
 	if e := r.ParseMultipartForm(h.Config.MaxUpload); e != nil {
 		bad(w, r, "Invalid upload")
@@ -695,10 +704,43 @@ func (h *Handler) DownloadDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer reader.Close()
+	h.audit(r, "document.downloaded", "document", &id, map[string]any{"version": d.VersionNumber})
 	w.Header().Set("Content-Type", d.MimeType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeHeaderName(d.OriginalFileName)))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = io.Copy(w, reader)
+}
+
+func (h *Handler) DeleteDocument(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validID(id) {
+		bad(w, r, "Invalid document ID")
+		return
+	}
+	u := user(r)
+	if err := h.Service.DeleteDocument(r.Context(), u.FirmID, u.ID, id); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "document.deleted", "document", &id, map[string]any{"retention": "metadata and versions preserved"})
+	h.Hub.Publish(u.FirmID, realtime.Event{Type: "document.deleted", ResourceType: "document", ResourceID: id})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) RestoreDocument(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validID(id) {
+		bad(w, r, "Invalid document ID")
+		return
+	}
+	u := user(r)
+	if err := h.Service.RestoreDocument(r.Context(), u.FirmID, u.ID, id); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "document.restored", "document", &id, map[string]any{})
+	h.Hub.Publish(u.FirmID, realtime.Event{Type: "document.restored", ResourceType: "document", ResourceID: id})
+	w.WriteHeader(http.StatusNoContent)
 }
 func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")

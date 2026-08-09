@@ -98,11 +98,11 @@ Matter events record actor, timestamp, type, summary and related resource. Publi
 
 ## Document Management
 
-Metadata belongs to PostgreSQL; content belongs to object storage. Storage keys are generated internally, filenames are never paths, downloads repeat firm/Matter authorization, MIME and size are constrained, and each version records SHA-256 checksum, creator and notes.
+Metadata belongs to PostgreSQL; content belongs to object storage. Uploads are streamed through size enforcement and SHA-256 calculation, storage keys are firm-prefixed and generated internally, filenames are never paths, and downloads repeat firm/Matter authorization. Each version records checksum, creator and notes; downloads are audited.
 
 ## Document Versioning
 
-Uploading a new version never silently overwrites the prior object. The current pointer advances transactionally while older versions remain downloadable according to the same authorization boundary.
+Uploading a new version never silently overwrites the prior object. The current pointer advances transactionally while older versions remain downloadable according to the same authorization boundary. Deletion is a reversible metadata action; physical purge is a separate retention decision that must account for legal hold.
 
 ## Deadlines and Tasks
 

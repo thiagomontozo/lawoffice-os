@@ -74,7 +74,7 @@ func (s *Store) AddDocumentVersion(ctx context.Context, firmID, userID, document
 	return v, nil
 }
 func (s *Store) Documents(ctx context.Context, firmID, userID, q string, matterID *string, limit, offset int) ([]domain.Document, error) {
-	rows, e := s.Pool.Query(ctx, `SELECT d.id,d.matter_id,d.client_id,d.title,d.description,d.category,v.version_number,v.original_file_name,v.mime_type,v.size_bytes,v.checksum,d.client_visible,d.created_at FROM documents d JOIN document_versions v ON v.id=d.current_version_id AND v.firm_id=d.firm_id WHERE d.firm_id=$1 AND d.deleted_at IS NULL AND ($2='' OR d.title ILIKE '%'||$2||'%') AND ($3::uuid IS NULL OR d.matter_id=$3) AND (d.matter_id IS NULL OR EXISTS(SELECT 1 FROM matters m WHERE m.id=d.matter_id AND m.firm_id=d.firm_id AND (m.confidentiality='normal' OR m.responsible_user_id=$4 OR m.created_by=$4 OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND ma.user_id=$4)))) ORDER BY d.updated_at DESC LIMIT $5 OFFSET $6`, firmID, q, matterID, userID, limit, offset)
+	rows, e := s.Pool.Query(ctx, `SELECT d.id,d.matter_id,d.client_id,d.title,d.description,d.category,v.version_number,v.original_file_name,v.mime_type,v.size_bytes,v.checksum,d.client_visible,d.created_at FROM documents d JOIN document_versions v ON v.id=d.current_version_id AND v.firm_id=d.firm_id LEFT JOIN matters m ON m.id=d.matter_id AND m.firm_id=d.firm_id WHERE d.firm_id=$1 AND d.deleted_at IS NULL AND ($2='' OR d.title ILIKE '%'||$2||'%') AND ($3::uuid IS NULL OR d.matter_id=$3) AND (d.matter_id IS NULL OR m.confidentiality='normal' OR m.responsible_user_id=$4 OR m.created_by=$4 OR (m.confidentiality='partners_only' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$4 AND r.name IN('Owner','Partner','Administrator'))) OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$4 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$4)))) ORDER BY d.updated_at DESC LIMIT $5 OFFSET $6`, firmID, q, matterID, userID, limit, offset)
 	if e != nil {
 		return nil, e
 	}
@@ -89,8 +89,25 @@ func (s *Store) Documents(ctx context.Context, firmID, userID, q string, matterI
 	}
 	return items, rows.Err()
 }
+
+func (s *Store) DeletedDocuments(ctx context.Context, firmID, userID string) ([]domain.Document, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT d.id,d.matter_id,d.client_id,d.title,d.description,d.category,v.version_number,v.original_file_name,v.mime_type,v.size_bytes,v.checksum,d.client_visible,d.created_at,d.deleted_at FROM documents d JOIN document_versions v ON v.id=d.current_version_id AND v.firm_id=d.firm_id LEFT JOIN matters m ON m.id=d.matter_id AND m.firm_id=d.firm_id WHERE d.firm_id=$1 AND d.deleted_at IS NOT NULL AND (d.matter_id IS NULL OR m.confidentiality='normal' OR m.responsible_user_id=$2 OR m.created_by=$2 OR (m.confidentiality='partners_only' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$2 AND r.name IN('Owner','Partner','Administrator'))) OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$2 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$2)))) ORDER BY d.deleted_at DESC LIMIT 200`, firmID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Document{}
+	for rows.Next() {
+		var document domain.Document
+		if err = rows.Scan(&document.ID, &document.MatterID, &document.ClientID, &document.Title, &document.Description, &document.Category, &document.VersionNumber, &document.OriginalFileName, &document.MimeType, &document.SizeBytes, &document.Checksum, &document.ClientVisible, &document.CreatedAt, &document.DeletedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, document)
+	}
+	return items, rows.Err()
+}
 func (s *Store) DocumentVersion(ctx context.Context, firmID, userID, documentID string, version *int) (domain.Document, string, error) {
-	query := `SELECT d.id,d.matter_id,d.client_id,d.title,d.description,d.category,v.version_number,v.original_file_name,v.storage_key,v.mime_type,v.size_bytes,v.checksum,d.client_visible,d.created_at FROM documents d JOIN document_versions v ON v.document_id=d.id AND v.firm_id=d.firm_id WHERE d.firm_id=$1 AND d.id=$2 AND d.deleted_at IS NULL AND ($3::int IS NULL OR v.version_number=$3) AND ($3::int IS NOT NULL OR v.id=d.current_version_id) AND (d.matter_id IS NULL OR EXISTS(SELECT 1 FROM matters m WHERE m.id=d.matter_id AND m.firm_id=d.firm_id AND (m.confidentiality='normal' OR m.responsible_user_id=$4 OR m.created_by=$4 OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.user_id=$4))))`
+	query := `SELECT d.id,d.matter_id,d.client_id,d.title,d.description,d.category,v.version_number,v.original_file_name,v.storage_key,v.mime_type,v.size_bytes,v.checksum,d.client_visible,d.created_at FROM documents d JOIN document_versions v ON v.document_id=d.id AND v.firm_id=d.firm_id LEFT JOIN matters m ON m.id=d.matter_id AND m.firm_id=d.firm_id WHERE d.firm_id=$1 AND d.id=$2 AND d.deleted_at IS NULL AND ($3::int IS NULL OR v.version_number=$3) AND ($3::int IS NOT NULL OR v.id=d.current_version_id) AND (d.matter_id IS NULL OR m.confidentiality='normal' OR m.responsible_user_id=$4 OR m.created_by=$4 OR (m.confidentiality='partners_only' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$4 AND r.name IN('Owner','Partner','Administrator'))) OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$4 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$4))))`
 	var d domain.Document
 	var key string
 	e := s.Pool.QueryRow(ctx, query, firmID, documentID, version, userID).Scan(&d.ID, &d.MatterID, &d.ClientID, &d.Title, &d.Description, &d.Category, &d.VersionNumber, &d.OriginalFileName, &key, &d.MimeType, &d.SizeBytes, &d.Checksum, &d.ClientVisible, &d.CreatedAt)
@@ -98,6 +115,37 @@ func (s *Store) DocumentVersion(ctx context.Context, firmID, userID, documentID 
 		return d, "", ErrNotFound
 	}
 	return d, key, e
+}
+
+func (s *Store) DocumentMatter(ctx context.Context, firmID, documentID string, includeDeleted bool) (*string, error) {
+	var matterID *string
+	err := s.Pool.QueryRow(ctx, `SELECT matter_id FROM documents WHERE firm_id=$1 AND id=$2 AND ($3 OR deleted_at IS NULL)`, firmID, documentID, includeDeleted).Scan(&matterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return matterID, err
+}
+
+func (s *Store) SoftDeleteDocument(ctx context.Context, firmID, userID, documentID string) error {
+	result, err := s.Pool.Exec(ctx, `UPDATE documents SET deleted_at=now(),deleted_by=$3,updated_at=now() WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL`, firmID, documentID, userID)
+	if err != nil {
+		return mapError(err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) RestoreDocument(ctx context.Context, firmID, documentID string) error {
+	result, err := s.Pool.Exec(ctx, `UPDATE documents SET deleted_at=NULL,deleted_by=NULL,updated_at=now() WHERE firm_id=$1 AND id=$2 AND deleted_at IS NOT NULL`, firmID, documentID)
+	if err != nil {
+		return mapError(err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 func (s *Store) Versions(ctx context.Context, firmID, documentID string) ([]domain.DocumentVersion, error) {
 	rows, e := s.Pool.Query(ctx, `SELECT v.id,v.version_number,v.original_file_name,v.mime_type,v.size_bytes,v.checksum,u.name,v.created_at,v.notes FROM document_versions v JOIN users u ON u.id=v.created_by AND u.firm_id=v.firm_id JOIN documents d ON d.id=v.document_id AND d.firm_id=v.firm_id WHERE v.firm_id=$1 AND v.document_id=$2 AND d.deleted_at IS NULL ORDER BY v.version_number DESC`, firmID, documentID)
@@ -114,16 +162,6 @@ func (s *Store) Versions(ctx context.Context, firmID, documentID string) ([]doma
 		items = append(items, v)
 	}
 	return items, rows.Err()
-}
-func (s *Store) SoftDeleteDocument(ctx context.Context, firmID, userID, id string) error {
-	r, e := s.Pool.Exec(ctx, `UPDATE documents SET deleted_at=now(),deleted_by=$2 WHERE firm_id=$1 AND id=$3 AND deleted_at IS NULL`, firmID, userID, id)
-	if e != nil {
-		return e
-	}
-	if r.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
 }
 func (s *Store) Deadlines(ctx context.Context, firmID, userID string, matterID *string, assignedOnly bool) ([]domain.Deadline, error) {
 	rows, e := s.Pool.Query(ctx, `SELECT d.id,d.matter_id,m.title,d.title,d.description,d.due_at,d.status,d.priority,d.assigned_to,u.name,d.completed_at FROM deadlines d JOIN matters m ON m.id=d.matter_id AND m.firm_id=d.firm_id LEFT JOIN users u ON u.id=d.assigned_to WHERE d.firm_id=$1 AND ($2::uuid IS NULL OR d.matter_id=$2) AND (NOT $3 OR d.assigned_to=$4) AND (m.confidentiality='normal' OR m.responsible_user_id=$4 OR m.created_by=$4 OR (m.confidentiality='partners_only' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$4 AND r.name IN('Owner','Partner','Administrator'))) OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$4 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$4)))) ORDER BY d.status='open' DESC,d.due_at`, firmID, matterID, assignedOnly, userID)

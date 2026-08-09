@@ -88,42 +88,56 @@ type Upload struct {
 
 var fileTypes = map[string]string{"application/pdf": ".pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx", "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "text/plain; charset=utf-8": ".txt", "text/plain": ".txt"}
 
-func (s *Service) readUpload(ctx context.Context, h *multipart.FileHeader) ([]byte, string, string, error) {
+type countWriter struct{ n int64 }
+
+func (w *countWriter) Write(p []byte) (int, error) {
+	w.n += int64(len(p))
+	return len(p), nil
+}
+
+func (s *Service) storeUpload(ctx context.Context, firmID string, h *multipart.FileHeader) (string, string, string, int64, string, error) {
 	if h == nil || h.Size < 1 || h.Size > s.MaxUpload {
-		return nil, "", "", fmt.Errorf("%w: invalid file size", ErrValidation)
+		return "", "", "", 0, "", fmt.Errorf("%w: invalid file size", ErrValidation)
 	}
 	f, e := h.Open()
 	if e != nil {
-		return nil, "", "", e
+		return "", "", "", 0, "", e
 	}
 	defer f.Close()
 	limited := io.LimitReader(f, s.MaxUpload+1)
-	body, e := io.ReadAll(limited)
-	if e != nil {
-		return nil, "", "", e
+	prefix := make([]byte, 512)
+	n, readErr := io.ReadFull(limited, prefix)
+	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+		return "", "", "", 0, "", readErr
 	}
-	if int64(len(body)) > s.MaxUpload {
-		return nil, "", "", fmt.Errorf("%w: upload too large", ErrValidation)
+	if n == 0 {
+		return "", "", "", 0, "", fmt.Errorf("%w: empty upload", ErrValidation)
 	}
-	mime := http.DetectContentType(body[:min(512, len(body))])
+	mime := http.DetectContentType(prefix[:n])
 	ext, ok := fileTypes[mime]
 	if !ok {
-		return nil, "", "", fmt.Errorf("%w: unsupported MIME type", ErrValidation)
+		return "", "", "", 0, "", fmt.Errorf("%w: unsupported MIME type", ErrValidation)
 	}
 	provided := strings.ToLower(filepath.Ext(h.Filename))
 	if mime == "image/jpeg" {
 		if provided != ".jpg" && provided != ".jpeg" {
-			return nil, "", "", fmt.Errorf("%w: extension mismatch", ErrValidation)
+			return "", "", "", 0, "", fmt.Errorf("%w: extension mismatch", ErrValidation)
 		}
 	} else if provided != ext {
-		return nil, "", "", fmt.Errorf("%w: extension mismatch", ErrValidation)
+		return "", "", "", 0, "", fmt.Errorf("%w: extension mismatch", ErrValidation)
 	}
-	select {
-	case <-ctx.Done():
-		return nil, "", "", ctx.Err()
-	default:
+	hasher := sha256.New()
+	counter := &countWriter{}
+	source := io.MultiReader(bytes.NewReader(prefix[:n]), limited)
+	key := firmID + "_" + uuid.NewString() + ext
+	if e = s.Storage.Put(ctx, key, io.TeeReader(source, io.MultiWriter(hasher, counter))); e != nil {
+		return "", "", "", 0, "", e
 	}
-	return body, mime, ext, nil
+	if counter.n < 1 || counter.n > s.MaxUpload {
+		_ = s.Storage.Delete(ctx, key)
+		return "", "", "", 0, "", fmt.Errorf("%w: upload too large", ErrValidation)
+	}
+	return key, mime, safeName(h.Filename), counter.n, hex.EncodeToString(hasher.Sum(nil)), nil
 }
 func (s *Service) UploadDocument(ctx context.Context, u Upload) (domain.Document, error) {
 	u.Title = strings.TrimSpace(u.Title)
@@ -140,16 +154,11 @@ func (s *Service) UploadDocument(ctx context.Context, u Upload) (domain.Document
 			return domain.Document{}, repository.ErrForbidden
 		}
 	}
-	body, mime, ext, e := s.readUpload(ctx, u.Header)
+	key, mime, originalName, size, checksum, e := s.storeUpload(ctx, u.FirmID, u.Header)
 	if e != nil {
 		return domain.Document{}, e
 	}
-	key := uuid.NewString() + ext
-	sum := sha256.Sum256(body)
-	if e = s.Storage.Put(ctx, key, bytes.NewReader(body)); e != nil {
-		return domain.Document{}, e
-	}
-	d := domain.Document{MatterID: u.MatterID, ClientID: u.ClientID, Title: u.Title, Description: u.Description, Category: u.Category, OriginalFileName: safeName(u.Header.Filename), MimeType: mime, SizeBytes: int64(len(body)), Checksum: hex.EncodeToString(sum[:]), ClientVisible: u.ClientVisible}
+	d := domain.Document{MatterID: u.MatterID, ClientID: u.ClientID, Title: u.Title, Description: u.Description, Category: u.Category, OriginalFileName: originalName, MimeType: mime, SizeBytes: size, Checksum: checksum, ClientVisible: u.ClientVisible}
 	created, e := s.Store.CreateDocument(ctx, u.FirmID, u.UserID, d, key)
 	if e != nil {
 		_ = s.Storage.Delete(ctx, key)
@@ -168,16 +177,11 @@ func (s *Service) AddVersion(ctx context.Context, firmID, userID, documentID str
 			return domain.DocumentVersion{}, repository.ErrForbidden
 		}
 	}
-	body, mime, ext, e := s.readUpload(ctx, h)
+	key, mime, originalName, size, checksum, e := s.storeUpload(ctx, firmID, h)
 	if e != nil {
 		return domain.DocumentVersion{}, e
 	}
-	key := uuid.NewString() + ext
-	sum := sha256.Sum256(body)
-	if e = s.Storage.Put(ctx, key, bytes.NewReader(body)); e != nil {
-		return domain.DocumentVersion{}, e
-	}
-	v, e := s.Store.AddDocumentVersion(ctx, firmID, userID, documentID, safeName(h.Filename), key, mime, int64(len(body)), hex.EncodeToString(sum[:]), notes)
+	v, e := s.Store.AddDocumentVersion(ctx, firmID, userID, documentID, originalName, key, mime, size, checksum, notes)
 	if e != nil {
 		_ = s.Storage.Delete(ctx, key)
 	}
@@ -191,6 +195,34 @@ func (s *Service) OpenDocument(ctx context.Context, firmID, userID, id string, v
 	f, e := s.Storage.Open(ctx, key)
 	return d, f, e
 }
+
+func (s *Service) DeleteDocument(ctx context.Context, firmID, userID, id string) error {
+	matterID, err := s.Store.DocumentMatter(ctx, firmID, id, false)
+	if err != nil {
+		return err
+	}
+	if matterID != nil {
+		allowed, accessErr := s.Store.CanAccessMatter(ctx, firmID, userID, *matterID, "manage")
+		if accessErr != nil || !allowed {
+			return repository.ErrForbidden
+		}
+	}
+	return s.Store.SoftDeleteDocument(ctx, firmID, userID, id)
+}
+
+func (s *Service) RestoreDocument(ctx context.Context, firmID, userID, id string) error {
+	matterID, err := s.Store.DocumentMatter(ctx, firmID, id, true)
+	if err != nil {
+		return err
+	}
+	if matterID != nil {
+		allowed, accessErr := s.Store.CanAccessMatter(ctx, firmID, userID, *matterID, "manage")
+		if accessErr != nil || !allowed {
+			return repository.ErrForbidden
+		}
+	}
+	return s.Store.RestoreDocument(ctx, firmID, id)
+}
 func (s *Service) UpdateBranding(ctx context.Context, firmID, userID string, b domain.Branding) (domain.Branding, error) {
 	hexColor := regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 	if strings.TrimSpace(b.SystemTitle) == "" || !hexColor.MatchString(b.PrimaryColor) || !hexColor.MatchString(b.SecondaryColor) || !hexColor.MatchString(b.AccentColor) {
@@ -199,16 +231,13 @@ func (s *Service) UpdateBranding(ctx context.Context, firmID, userID string, b d
 	return s.Store.UpdateBranding(ctx, firmID, userID, b)
 }
 func (s *Service) UploadBrandAsset(ctx context.Context, firmID, userID, kind string, header *multipart.FileHeader) error {
-	body, mimeType, extension, err := s.readUpload(ctx, header)
+	key, mimeType, _, _, _, err := s.storeUpload(ctx, firmID, header)
 	if err != nil {
 		return err
 	}
 	if mimeType != "image/png" && mimeType != "image/jpeg" && mimeType != "image/webp" {
+		_ = s.Storage.Delete(ctx, key)
 		return fmt.Errorf("%w: branding assets must be PNG, JPEG, or WEBP", ErrValidation)
-	}
-	key := uuid.NewString() + extension
-	if err := s.Storage.Put(ctx, key, bytes.NewReader(body)); err != nil {
-		return err
 	}
 	if err := s.Store.SetBrandAsset(ctx, firmID, userID, kind, key); err != nil {
 		_ = s.Storage.Delete(ctx, key)

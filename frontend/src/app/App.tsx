@@ -11,7 +11,6 @@ import {
   AuditPage,
   CalendarPage,
   ConflictPage,
-  DocumentsPage,
   FinancePage,
   WorkflowsPage,
 } from "../pages/Operations";
@@ -21,6 +20,7 @@ import {
   TasksPage,
   UsersPage,
 } from "../pages/ManagementPages";
+import { DocumentsPage } from "../pages/DocumentsPage";
 import { BrandingPage } from "../pages/Branding";
 import { PortalHome, PortalMatter } from "../pages/Portal";
 import { SettingsPage } from "../pages/Settings";
