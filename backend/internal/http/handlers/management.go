@@ -48,6 +48,50 @@ func (h *Handler) CreateContact(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "contact.created", "contact", &created.ID, map[string]any{"type": created.Type})
 	writeJSON(w, 201, created)
 }
+
+func (h *Handler) UpdateContact(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var x domain.Contact
+	if !validID(id) || decode(w, r, &x) != nil {
+		bad(w, r, "Invalid contact")
+		return
+	}
+	name, ok := required(x.Name, 180)
+	if !ok {
+		bad(w, r, "Contact name is required")
+		return
+	}
+	if x.ClientID != nil && !validID(*x.ClientID) {
+		bad(w, r, "Invalid client ID")
+		return
+	}
+	x.Name = name
+	if x.Type == "" {
+		x.Type = "other"
+	}
+	u := user(r)
+	updated, err := h.Store.UpdateContact(r.Context(), u.FirmID, id, x)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "contact.updated", "contact", &id, map[string]any{"type": updated.Type})
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) ArchiveContact(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validID(id) {
+		bad(w, r, "Invalid contact ID")
+		return
+	}
+	if err := h.Store.ArchiveContact(r.Context(), user(r).FirmID, id); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "contact.archived", "contact", &id, map[string]any{})
+	w.WriteHeader(http.StatusNoContent)
+}
 func (h *Handler) AddParty(w http.ResponseWriter, r *http.Request) {
 	matterID := chi.URLParam(r, "id")
 	var x domain.Party

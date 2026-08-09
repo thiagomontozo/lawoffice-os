@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
 )
 
@@ -27,6 +29,25 @@ func (s *Store) Contacts(ctx context.Context, firmID string) ([]domain.Contact, 
 func (s *Store) CreateContact(ctx context.Context, firmID string, x domain.Contact) (domain.Contact, error) {
 	err := s.Pool.QueryRow(ctx, `INSERT INTO contacts(firm_id,client_id,name,type,email,phone,document)VALUES($1,$2,$3,$4,$5,$6,$7)RETURNING id`, firmID, x.ClientID, x.Name, x.Type, x.Email, x.Phone, x.Document).Scan(&x.ID)
 	return x, mapError(err)
+}
+
+func (s *Store) UpdateContact(ctx context.Context, firmID, id string, x domain.Contact) (domain.Contact, error) {
+	err := s.Pool.QueryRow(ctx, `UPDATE contacts SET client_id=$3,name=$4,type=$5,email=$6,phone=$7,document=$8,notes=$9 WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL RETURNING id,client_id,name,type,email,phone,document`, firmID, id, x.ClientID, x.Name, x.Type, x.Email, x.Phone, x.Document, nil).Scan(&x.ID, &x.ClientID, &x.Name, &x.Type, &x.Email, &x.Phone, &x.Document)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return x, ErrNotFound
+	}
+	return x, mapError(err)
+}
+
+func (s *Store) ArchiveContact(ctx context.Context, firmID, id string) error {
+	r, err := s.Pool.Exec(ctx, `UPDATE contacts SET deleted_at=now() WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL`, firmID, id)
+	if err != nil {
+		return mapError(err)
+	}
+	if r.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 func (s *Store) AddParty(ctx context.Context, firmID, userID, matterID string, x domain.Party) (domain.Party, error) {
 	err := s.Pool.QueryRow(ctx, `INSERT INTO matter_parties(firm_id,matter_id,name,document,role,side)VALUES($1,$2,$3,$4,$5,$6)RETURNING id`, firmID, matterID, x.Name, x.Document, x.Role, x.Side).Scan(&x.ID)

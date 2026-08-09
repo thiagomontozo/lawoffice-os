@@ -10,15 +10,17 @@ import {
   ArchivePage,
   AuditPage,
   CalendarPage,
-  ClientsPage,
   ConflictPage,
   DocumentsPage,
   FinancePage,
+  WorkflowsPage,
+} from "../pages/Operations";
+import {
+  ClientsPage,
   RolesPage,
   TasksPage,
   UsersPage,
-  WorkflowsPage,
-} from "../pages/Operations";
+} from "../pages/ManagementPages";
 import { BrandingPage } from "../pages/Branding";
 import { PortalHome, PortalMatter } from "../pages/Portal";
 import { SettingsPage } from "../pages/Settings";

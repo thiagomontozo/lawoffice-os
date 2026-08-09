@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { LoaderCircle, Inbox } from "lucide-react";
+import { LoaderCircle, Inbox, X } from "lucide-react";
 export function Button({
   className = "",
   ...props
@@ -88,6 +88,49 @@ export function Empty({
         <h3 className="font-semibold">{title}</h3>
         <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
+    </div>
+  );
+}
+
+export function Modal({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"
+      role="presentation"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+      >
+        <header className="mb-5 flex items-center justify-between">
+          <h2 id="dialog-title" className="text-lg font-bold">
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-lg p-2 hover:bg-slate-100"
+          >
+            <X size={18} />
+          </button>
+        </header>
+        {children}
+      </section>
     </div>
   );
 }

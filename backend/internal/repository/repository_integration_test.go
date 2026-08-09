@@ -67,6 +67,13 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	if _, err = store.Client(ctx, ownerA.FirmID, clientA.ID); err != nil {
 		t.Fatalf("own client missing: %v", err)
 	}
+	clientA.Name = "Client Alpha Updated"
+	if _, err = store.UpdateClient(ctx, ownerB.FirmID, clientA.ID, clientA); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-firm client update should fail, got %v", err)
+	}
+	if clientA, err = store.UpdateClient(ctx, ownerA.FirmID, clientA.ID, clientA); err != nil || clientA.Name != "Client Alpha Updated" {
+		t.Fatalf("own client update failed: client=%+v err=%v", clientA, err)
+	}
 	passwordHash, _ := auth.HashPassword("secondary-password")
 	other, err := store.CreateUser(ctx, ownerA.FirmID, "Other Lawyer", "other-"+uuid.NewString()[:8]+"@example.test", passwordHash, nil)
 	if err != nil {
@@ -99,5 +106,15 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	}
 	if _, _, err = store.DocumentVersion(ctx, ownerA.FirmID, other.ID, doc.ID, nil); err != nil {
 		t.Fatalf("authorized document lookup failed: %v", err)
+	}
+	task, err := store.CreateTask(ctx, ownerA.FirmID, ownerA.ID, domain.Task{MatterID: &matter.ID, Title: "Review restricted advice", Status: "todo", Priority: "normal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.UpdateTaskStatus(ctx, ownerB.FirmID, ownerB.ID, task.ID, "done"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-firm task update should fail, got %v", err)
+	}
+	if err = store.UpdateTaskStatus(ctx, ownerA.FirmID, ownerA.ID, task.ID, "done"); err != nil {
+		t.Fatalf("own task update failed: %v", err)
 	}
 }

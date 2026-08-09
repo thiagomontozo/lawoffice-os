@@ -45,6 +45,25 @@ func (s *Store) CreateClient(ctx context.Context, firmID string, x domain.Client
 	e := s.Pool.QueryRow(ctx, `INSERT INTO clients(firm_id,type,name,legal_name,trade_name,document,email,phone,notes)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)RETURNING id,active,created_at`, firmID, x.Type, x.Name, x.LegalName, x.TradeName, x.Document, x.Email, x.Phone, x.Notes).Scan(&x.ID, &x.Active, &x.CreatedAt)
 	return x, mapError(e)
 }
+
+func (s *Store) UpdateClient(ctx context.Context, firmID, id string, x domain.Client) (domain.Client, error) {
+	e := s.Pool.QueryRow(ctx, `UPDATE clients SET type=$3,name=$4,legal_name=$5,trade_name=$6,document=$7,email=$8,phone=$9,notes=$10,updated_at=now() WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL RETURNING id,type,name,legal_name,trade_name,document,email,phone,notes,active,created_at`, firmID, id, x.Type, x.Name, x.LegalName, x.TradeName, x.Document, x.Email, x.Phone, x.Notes).Scan(&x.ID, &x.Type, &x.Name, &x.LegalName, &x.TradeName, &x.Document, &x.Email, &x.Phone, &x.Notes, &x.Active, &x.CreatedAt)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return x, ErrNotFound
+	}
+	return x, mapError(e)
+}
+
+func (s *Store) ArchiveClient(ctx context.Context, firmID, userID, id string) error {
+	r, e := s.Pool.Exec(ctx, `UPDATE clients SET active=false,deleted_at=now(),deleted_by=$3,updated_at=now() WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL`, firmID, id, userID)
+	if e != nil {
+		return mapError(e)
+	}
+	if r.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
 func (s *Store) Client(ctx context.Context, firmID, id string) (domain.Client, error) {
 	var x domain.Client
 	e := s.Pool.QueryRow(ctx, `SELECT id,type,name,legal_name,trade_name,document,email,phone,notes,active,created_at FROM clients WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL`, firmID, id).Scan(&x.ID, &x.Type, &x.Name, &x.LegalName, &x.TradeName, &x.Document, &x.Email, &x.Phone, &x.Notes, &x.Active, &x.CreatedAt)

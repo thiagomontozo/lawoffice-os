@@ -47,6 +47,16 @@ func (s *Store) CreateUser(ctx context.Context, firmID, name, email, hash string
 	return u, nil
 }
 func (s *Store) SetUserActive(ctx context.Context, firmID, id string, active bool) error {
+	if !active {
+		var isOwner bool
+		var otherOwners int
+		if e := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$2 AND r.name='Owner'),(SELECT count(DISTINCT u.id) FROM users u JOIN user_roles ur ON ur.user_id=u.id AND ur.firm_id=u.firm_id JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE u.firm_id=$1 AND u.id<>$2 AND u.active AND u.deleted_at IS NULL AND r.name='Owner')`, firmID, id).Scan(&isOwner, &otherOwners); e != nil {
+			return e
+		}
+		if isOwner && otherOwners == 0 {
+			return ErrInvalid
+		}
+	}
 	r, e := s.Pool.Exec(ctx, `UPDATE users SET active=$3,disabled_at=CASE WHEN $3 THEN NULL ELSE now() END WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL`, firmID, id, active)
 	if e != nil {
 		return e
@@ -116,6 +126,131 @@ func (s *Store) CreateRole(ctx context.Context, firmID, name string, description
 	}
 	r.Permissions = permissions
 	return r, nil
+}
+
+func (s *Store) Permissions(ctx context.Context) ([]string, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT key FROM permissions ORDER BY key`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var key string
+		if err = rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		items = append(items, key)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) UpdateRole(ctx context.Context, firmID, id, name string, description *string, permissions []string) (domain.Role, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return domain.Role{}, err
+	}
+	defer tx.Rollback(ctx)
+	var role domain.Role
+	err = tx.QueryRow(ctx, `UPDATE roles SET name=$3,description=$4 WHERE firm_id=$1 AND id=$2 AND NOT system RETURNING id,name,description,system`, firmID, id, name, description).Scan(&role.ID, &role.Name, &role.Description, &role.System)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return role, ErrNotFound
+	}
+	if err != nil {
+		return role, mapError(err)
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM role_permissions WHERE role_id=$1`, id); err != nil {
+		return role, err
+	}
+	for _, permission := range permissions {
+		if _, err = tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_key)VALUES($1,$2)`, id, permission); err != nil {
+			return role, mapError(err)
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return role, err
+	}
+	role.Permissions = permissions
+	return role, nil
+}
+
+func (s *Store) UpdateUserRoles(ctx context.Context, firmID, userID string, roleIDs []string) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var targetIsOwner bool
+	var otherOwners int
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$2 AND r.name='Owner'),(SELECT count(DISTINCT u.id) FROM users u JOIN user_roles ur ON ur.user_id=u.id AND ur.firm_id=u.firm_id JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE u.firm_id=$1 AND u.id<>$2 AND u.active AND u.deleted_at IS NULL AND r.name='Owner')`, firmID, userID).Scan(&targetIsOwner, &otherOwners); err != nil {
+		return err
+	}
+	proposedOwner := false
+	for _, roleID := range roleIDs {
+		var isOwner bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM roles WHERE firm_id=$1 AND id=$2 AND name='Owner')`, firmID, roleID).Scan(&isOwner); err != nil {
+			return err
+		}
+		proposedOwner = proposedOwner || isOwner
+	}
+	if targetIsOwner && !proposedOwner && otherOwners == 0 {
+		return ErrInvalid
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM user_roles WHERE firm_id=$1 AND user_id=$2`, firmID, userID); err != nil {
+		return err
+	}
+	for _, roleID := range roleIDs {
+		result, execErr := tx.Exec(ctx, `INSERT INTO user_roles(user_id,role_id,firm_id) SELECT $1,id,$2 FROM roles WHERE firm_id=$2 AND id=$3`, userID, firmID, roleID)
+		if execErr != nil {
+			return mapError(execErr)
+		}
+		if result.RowsAffected() == 0 {
+			return ErrInvalid
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) UpdateTaskStatus(ctx context.Context, firmID, userID, id, status string) error {
+	var matterID *string
+	err := s.Pool.QueryRow(ctx, `UPDATE tasks SET status=$3,completed_at=CASE WHEN $3='done' THEN now() ELSE NULL END WHERE firm_id=$1 AND id=$2 RETURNING matter_id`, firmID, id, status).Scan(&matterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err == nil && matterID != nil {
+		_, _ = s.Pool.Exec(ctx, `INSERT INTO matter_events(firm_id,matter_id,type,summary,resource_type,resource_id,actor_id)VALUES($1,$2,'task.updated',$3,'task',$4,$5)`, firmID, *matterID, "Task status changed to "+status, id, userID)
+	}
+	return mapError(err)
+}
+
+func (s *Store) UpdateDeadlineStatus(ctx context.Context, firmID, userID, id, status string) error {
+	var matterID string
+	err := s.Pool.QueryRow(ctx, `UPDATE deadlines SET status=$3,completed_at=CASE WHEN $3='completed' THEN now() ELSE NULL END WHERE firm_id=$1 AND id=$2 RETURNING matter_id`, firmID, id, status).Scan(&matterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err == nil {
+		_, _ = s.Pool.Exec(ctx, `INSERT INTO matter_events(firm_id,matter_id,type,summary,resource_type,resource_id,actor_id)VALUES($1,$2,'deadline.updated',$3,'deadline',$4,$5)`, firmID, matterID, "Deadline status changed to "+status, id, userID)
+	}
+	return mapError(err)
+}
+
+func (s *Store) TaskMatter(ctx context.Context, firmID, id string) (*string, error) {
+	var matterID *string
+	err := s.Pool.QueryRow(ctx, `SELECT matter_id FROM tasks WHERE firm_id=$1 AND id=$2`, firmID, id).Scan(&matterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return matterID, err
+}
+
+func (s *Store) DeadlineMatter(ctx context.Context, firmID, id string) (string, error) {
+	var matterID string
+	err := s.Pool.QueryRow(ctx, `SELECT matter_id FROM deadlines WHERE firm_id=$1 AND id=$2`, firmID, id).Scan(&matterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return matterID, err
 }
 func (s *Store) CreateDeadline(ctx context.Context, firmID, userID string, x domain.Deadline) (domain.Deadline, error) {
 	e := s.Pool.QueryRow(ctx, `INSERT INTO deadlines(firm_id,matter_id,title,description,due_at,priority,assigned_to,created_by)VALUES($1,$2,$3,$4,$5,$6,$7,$8)RETURNING id,status`, firmID, x.MatterID, x.Title, x.Description, x.DueAt, x.Priority, x.AssignedTo, userID).Scan(&x.ID, &x.Status)

@@ -382,6 +382,69 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, x)
 }
 
+func (h *Handler) Permissions(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Store.Permissions(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var in struct {
+		Name        string   `json:"name"`
+		Description *string  `json:"description"`
+		Permissions []string `json:"permissions"`
+	}
+	if !validID(id) || decode(w, r, &in) != nil {
+		bad(w, r, "Invalid role")
+		return
+	}
+	name, ok := required(in.Name, 80)
+	if !ok || len(in.Permissions) > 100 {
+		bad(w, r, "Role name and a valid permission set are required")
+		return
+	}
+	u := user(r)
+	role, err := h.Store.UpdateRole(r.Context(), u.FirmID, id, name, in.Description, in.Permissions)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "role.updated", "role", &id, map[string]any{"permissionCount": len(in.Permissions)})
+	writeJSON(w, http.StatusOK, role)
+}
+
+func (h *Handler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var in struct {
+		RoleIDs []string `json:"roleIds"`
+	}
+	if !validID(id) || decode(w, r, &in) != nil || len(in.RoleIDs) == 0 || len(in.RoleIDs) > 20 {
+		bad(w, r, "At least one valid role is required")
+		return
+	}
+	for _, roleID := range in.RoleIDs {
+		if !validID(roleID) {
+			bad(w, r, "Invalid role ID")
+			return
+		}
+	}
+	u := user(r)
+	if id == u.ID {
+		bad(w, r, "You cannot change your own roles")
+		return
+	}
+	if err := h.Store.UpdateUserRoles(r.Context(), u.FirmID, id, in.RoleIDs); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "user.roles_updated", "user", &id, map[string]any{"roleCount": len(in.RoleIDs)})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) Clients(w http.ResponseWriter, r *http.Request) {
 	p, s, ok := page(r)
 	if !ok {
@@ -415,6 +478,44 @@ func (h *Handler) CreateClient(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit(r, "client.created", "client", &created.ID, map[string]any{"type": created.Type})
 	writeJSON(w, 201, created)
+}
+
+func (h *Handler) UpdateClient(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var x domain.Client
+	if !validID(id) || decode(w, r, &x) != nil {
+		bad(w, r, "Invalid client")
+		return
+	}
+	name, ok := required(x.Name, 180)
+	if !ok || (x.Type != "person" && x.Type != "company") {
+		bad(w, r, "Valid name and type are required")
+		return
+	}
+	x.Name = name
+	u := user(r)
+	updated, err := h.Store.UpdateClient(r.Context(), u.FirmID, id, x)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "client.updated", "client", &id, map[string]any{"type": updated.Type})
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) ArchiveClient(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validID(id) {
+		bad(w, r, "Invalid client ID")
+		return
+	}
+	u := user(r)
+	if err := h.Store.ArchiveClient(r.Context(), u.FirmID, u.ID, id); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "client.archived", "client", &id, map[string]any{})
+	w.WriteHeader(http.StatusNoContent)
 }
 func (h *Handler) Client(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
@@ -684,6 +785,33 @@ func (h *Handler) CreateDeadline(w http.ResponseWriter, r *http.Request) {
 	h.Hub.Publish(u.FirmID, realtime.Event{Type: "deadline.created", ResourceType: "deadline", ResourceID: created.ID})
 	writeJSON(w, 201, created)
 }
+
+func (h *Handler) UpdateDeadlineStatus(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var in struct {
+		Status string `json:"status"`
+	}
+	if !validID(id) || decode(w, r, &in) != nil || !map[string]bool{"open": true, "completed": true, "cancelled": true}[in.Status] {
+		bad(w, r, "Invalid deadline status")
+		return
+	}
+	u := user(r)
+	matterID, err := h.Store.DeadlineMatter(r.Context(), u.FirmID, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if !h.canMatter(w, r, u, matterID, "write") {
+		return
+	}
+	if err = h.Store.UpdateDeadlineStatus(r.Context(), u.FirmID, u.ID, id, in.Status); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "deadline.updated", "deadline", &id, map[string]any{"status": in.Status})
+	h.Hub.Publish(u.FirmID, realtime.Event{Type: "deadline.updated", ResourceType: "deadline", ResourceID: id})
+	w.WriteHeader(http.StatusNoContent)
+}
 func (h *Handler) Tasks(w http.ResponseWriter, r *http.Request) {
 	u := user(r)
 	mid, ok := optionalID(r.URL.Query().Get("matterId"))
@@ -729,6 +857,33 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	h.Hub.Publish(u.FirmID, realtime.Event{Type: "task.created", ResourceType: "task", ResourceID: created.ID})
 	writeJSON(w, 201, created)
+}
+
+func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var in struct {
+		Status string `json:"status"`
+	}
+	if !validID(id) || decode(w, r, &in) != nil || !map[string]bool{"todo": true, "in_progress": true, "blocked": true, "done": true, "cancelled": true}[in.Status] {
+		bad(w, r, "Invalid task status")
+		return
+	}
+	u := user(r)
+	matterID, err := h.Store.TaskMatter(r.Context(), u.FirmID, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if matterID != nil && !h.canMatter(w, r, u, *matterID, "write") {
+		return
+	}
+	if err = h.Store.UpdateTaskStatus(r.Context(), u.FirmID, u.ID, id, in.Status); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "task.updated", "task", &id, map[string]any{"status": in.Status})
+	h.Hub.Publish(u.FirmID, realtime.Event{Type: "task.updated", ResourceType: "task", ResourceID: id})
+	w.WriteHeader(http.StatusNoContent)
 }
 func (h *Handler) Calendar(w http.ResponseWriter, r *http.Request) {
 	from := time.Now().AddDate(0, -1, 0)
