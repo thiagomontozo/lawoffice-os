@@ -1002,12 +1002,26 @@ func (h *Handler) Reopen(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if len(q) < 2 {
+	if len(q) < 2 || len([]rune(q)) > 120 {
 		bad(w, r, "Search requires at least two characters")
 		return
 	}
+	kind := strings.TrimSpace(r.URL.Query().Get("type"))
+	if !map[string]bool{"": true, "matter": true, "client": true, "contact": true, "document": true}[kind] {
+		bad(w, r, "Invalid search type")
+		return
+	}
+	limit := 30
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 50 {
+			bad(w, r, "Invalid search limit")
+			return
+		}
+		limit = parsed
+	}
 	u := user(r)
-	x, e := h.Store.Search(r.Context(), u.FirmID, u.ID, q)
+	x, e := h.Store.Search(r.Context(), u.FirmID, u.ID, q, kind, limit)
 	if e != nil {
 		h.fail(w, r, e)
 		return

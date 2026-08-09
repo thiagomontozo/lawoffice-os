@@ -90,12 +90,24 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	if err != nil || allowed {
 		t.Fatalf("restricted Matter unexpectedly accessible: allowed=%v err=%v", allowed, err)
 	}
+	search, err := store.Search(ctx, ownerA.FirmID, other.ID, "Restricted", "matter", 20)
+	if err != nil || len(search) != 0 {
+		t.Fatalf("restricted Matter leaked through search: results=%+v err=%v", search, err)
+	}
 	if err = store.GrantMatterAccess(ctx, ownerA.FirmID, matter.ID, &other.ID, nil, "read"); err != nil {
 		t.Fatal(err)
 	}
 	allowed, err = store.CanAccessMatter(ctx, ownerA.FirmID, other.ID, matter.ID, "read")
 	if err != nil || !allowed {
 		t.Fatalf("explicit Matter access not honored: allowed=%v err=%v", allowed, err)
+	}
+	search, err = store.Search(ctx, ownerA.FirmID, other.ID, "Restricted", "matter", 20)
+	if err != nil || len(search) != 1 || search[0].ID != matter.ID {
+		t.Fatalf("authorized ranked search failed: results=%+v err=%v", search, err)
+	}
+	search, err = store.Search(ctx, ownerB.FirmID, ownerB.ID, "Alpha Updated", "client", 20)
+	if err != nil || len(search) != 0 {
+		t.Fatalf("cross-firm client leaked through search: results=%+v err=%v", search, err)
 	}
 	doc, err := store.CreateDocument(ctx, ownerA.FirmID, ownerA.ID, domain.Document{MatterID: &matter.ID, Title: "Restricted evidence", Category: "evidence", OriginalFileName: "evidence.pdf", MimeType: "application/pdf", SizeBytes: 3, Checksum: "abc"}, uuid.NewString()+".pdf")
 	if err != nil {

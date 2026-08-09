@@ -39,7 +39,14 @@ export function AppLayout() {
   const [palette, setPalette] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<
-    { id: string; type: string; title: string; subtitle: string }[]
+    {
+      id: string;
+      type: string;
+      title: string;
+      subtitle: string;
+      matchedBy: string;
+      score: number;
+    }[]
   >([]);
   const navigate = useNavigate();
   const realtime = useRealtime();
@@ -61,7 +68,7 @@ export function AppLayout() {
     const timer = setTimeout(
       () =>
         void api<{ items: typeof results }>(
-          `/api/v1/search?q=${encodeURIComponent(query)}`,
+          `/api/v1/search?limit=30&q=${encodeURIComponent(query)}`,
         )
           .then((x) => setResults(x.items))
           .catch(() => setResults([])),
@@ -214,20 +221,39 @@ export function AppLayout() {
                 label="Abrir calendário"
                 onClick={() => navigate("/app/calendar")}
               />
-              {results.map((item) => (
-                <Command
-                  key={`${item.type}-${item.id}`}
-                  label={item.title}
-                  detail={`${item.type} · ${item.subtitle}`}
-                  onClick={() =>
-                    navigate(
-                      item.type === "matter"
-                        ? `/app/matters/${item.id}`
-                        : `/app/${item.type}s`,
-                    )
-                  }
-                />
-              ))}
+              {["matter", "client", "contact", "document"].map((type) => {
+                const group = results.filter((item) => item.type === type);
+                if (group.length === 0) return null;
+                return (
+                  <section key={type} aria-label={`Resultados: ${type}`}>
+                    <p className="px-4 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      {type === "matter"
+                        ? "Matters"
+                        : type === "client"
+                          ? "Clientes"
+                          : type === "contact"
+                            ? "Contatos"
+                            : "Documentos"}
+                    </p>
+                    {group.map((item) => (
+                      <Command
+                        key={`${item.type}-${item.id}`}
+                        label={item.title}
+                        detail={`${item.matchedBy} · ${item.subtitle}`}
+                        onClick={() =>
+                          navigate(
+                            item.type === "matter"
+                              ? `/app/matters/${item.id}`
+                              : item.type === "document"
+                                ? `/app/documents?document=${item.id}`
+                                : `/app/clients/${item.id}`,
+                          )
+                        }
+                      />
+                    ))}
+                  </section>
+                );
+              })}
             </div>
           </div>
         </div>

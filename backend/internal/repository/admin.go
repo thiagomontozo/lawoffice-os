@@ -319,13 +319,9 @@ func (s *Store) ReopenMatter(ctx context.Context, firmID, userID, matterID, reas
 	}
 	return tx.Commit(ctx)
 }
-func (s *Store) Search(ctx context.Context, firmID, userID, q string) ([]domain.SearchGroup, error) {
+func (s *Store) Search(ctx context.Context, firmID, userID, q, kind string, limit int) ([]domain.SearchGroup, error) {
 	clientsAllowed, _ := s.HasPermission(ctx, firmID, userID, "clients.read")
-	rows, e := s.Pool.Query(ctx, `SELECT type,id,title,subtitle FROM(
-SELECT 'matter' type,m.id,m.title,m.internal_number subtitle FROM matters m WHERE m.firm_id=$1 AND m.deleted_at IS NULL AND (m.title ILIKE $2 OR m.internal_number ILIKE $2) AND (m.confidentiality='normal' OR m.responsible_user_id=$3 OR m.created_by=$3 OR (m.confidentiality='partners_only' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$3 AND r.name IN('Owner','Partner','Administrator'))) OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$3 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$3))))
-UNION ALL SELECT 'client',c.id,c.name,COALESCE(c.document,'') FROM clients c WHERE $4 AND c.firm_id=$1 AND c.deleted_at IS NULL AND (c.name ILIKE $2 OR c.document ILIKE $2)
-UNION ALL SELECT 'contact',c.id,c.name,c.type FROM contacts c WHERE $4 AND c.firm_id=$1 AND c.deleted_at IS NULL AND c.name ILIKE $2
-UNION ALL SELECT 'document',d.id,d.title,d.category FROM documents d LEFT JOIN matters m ON m.id=d.matter_id AND m.firm_id=d.firm_id WHERE d.firm_id=$1 AND d.deleted_at IS NULL AND d.title ILIKE $2 AND (d.matter_id IS NULL OR m.confidentiality='normal' OR m.responsible_user_id=$3 OR m.created_by=$3 OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$3 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$3)))))q LIMIT 50`, firmID, "%"+q+"%", userID, clientsAllowed)
+	rows, e := s.Pool.Query(ctx, searchSQL, firmID, q, userID, clientsAllowed, kind, limit)
 	if e != nil {
 		return nil, e
 	}
@@ -333,13 +329,26 @@ UNION ALL SELECT 'document',d.id,d.title,d.category FROM documents d LEFT JOIN m
 	items := []domain.SearchGroup{}
 	for rows.Next() {
 		var x domain.SearchGroup
-		if e = rows.Scan(&x.Type, &x.ID, &x.Title, &x.Subtitle); e != nil {
+		if e = rows.Scan(&x.Type, &x.ID, &x.Title, &x.Subtitle, &x.MatchedBy, &x.Score); e != nil {
 			return nil, e
 		}
 		items = append(items, x)
 	}
 	return items, rows.Err()
 }
+
+const searchSQL = `WITH candidates AS (
+SELECT 'matter'::text type,m.id,m.title,m.internal_number::text subtitle,'matter'::text matched_by,GREATEST(similarity(m.title,$2::text),similarity(m.internal_number,$2::text),COALESCE(similarity(lp.case_number,$2::text),0))::float8 score
+FROM matters m LEFT JOIN matter_legal_process lp ON lp.matter_id=m.id AND lp.firm_id=m.firm_id
+WHERE m.firm_id=$1 AND m.deleted_at IS NULL AND ($5 IN('','matter')) AND (m.title ILIKE '%'||$2||'%' OR m.internal_number ILIKE '%'||$2||'%' OR lp.case_number ILIKE '%'||$2||'%') AND (m.confidentiality='normal' OR m.responsible_user_id=$3 OR m.created_by=$3 OR (m.confidentiality='partners_only' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$3 AND r.name IN('Owner','Partner','Administrator'))) OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$3 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$3))))
+UNION ALL SELECT 'client',c.id,c.name,COALESCE(c.document,''),'client',GREATEST(similarity(c.name,$2::text),COALESCE(similarity(c.document,$2::text),0))::float8 FROM clients c WHERE $4 AND c.firm_id=$1 AND c.deleted_at IS NULL AND ($5 IN('','client')) AND (c.name ILIKE '%'||$2||'%' OR c.document ILIKE '%'||$2||'%')
+UNION ALL SELECT 'contact',c.id,c.name,c.type,'contact',similarity(c.name,$2::text)::float8 FROM contacts c WHERE $4 AND c.firm_id=$1 AND c.deleted_at IS NULL AND ($5 IN('','contact')) AND c.name ILIKE '%'||$2||'%'
+UNION ALL SELECT 'document',d.id,d.title,d.category,'document',similarity(d.title,$2::text)::float8 FROM documents d LEFT JOIN matters m ON m.id=d.matter_id AND m.firm_id=d.firm_id WHERE d.firm_id=$1 AND d.deleted_at IS NULL AND ($5 IN('','document')) AND d.title ILIKE '%'||$2||'%' AND (d.matter_id IS NULL OR m.confidentiality='normal' OR m.responsible_user_id=$3 OR m.created_by=$3 OR (m.confidentiality='partners_only' AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id AND r.firm_id=ur.firm_id WHERE ur.firm_id=$1 AND ur.user_id=$3 AND r.name IN('Owner','Partner','Administrator'))) OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$3 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$3))))
+UNION ALL SELECT 'matter',m.id,m.title,'Party: '||p.name,'party',similarity(p.name,$2::text)::float8 FROM matter_parties p JOIN matters m ON m.id=p.matter_id AND m.firm_id=p.firm_id WHERE p.firm_id=$1 AND m.deleted_at IS NULL AND ($5 IN('','matter')) AND p.name ILIKE '%'||$2||'%' AND (m.confidentiality='normal' OR m.responsible_user_id=$3 OR m.created_by=$3 OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$3 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$3))))
+UNION ALL SELECT 'matter',m.id,m.title,'Tag: '||t.name,'tag',similarity(t.name,$2::text)::float8 FROM entity_tags et JOIN tags t ON t.id=et.tag_id AND t.firm_id=et.firm_id JOIN matters m ON m.id=et.entity_id AND m.firm_id=et.firm_id WHERE et.firm_id=$1 AND et.entity_type='matter' AND m.deleted_at IS NULL AND ($5 IN('','matter')) AND t.name ILIKE '%'||$2||'%' AND (m.confidentiality='normal' OR m.responsible_user_id=$3 OR m.created_by=$3 OR EXISTS(SELECT 1 FROM matter_access ma WHERE ma.matter_id=m.id AND ma.firm_id=m.firm_id AND (ma.user_id=$3 OR ma.role_id IN(SELECT role_id FROM user_roles WHERE firm_id=$1 AND user_id=$3))))
+), ranked AS (SELECT DISTINCT ON(type,id) type,id,title,subtitle,matched_by,score FROM candidates ORDER BY type,id,score DESC)
+SELECT type,id,title,subtitle,matched_by,score FROM ranked ORDER BY score DESC,title LIMIT $6`
+
 func (s *Store) Notifications(ctx context.Context, firmID, userID string) ([]domain.Notification, error) {
 	rows, e := s.Pool.Query(ctx, `SELECT id,type,title,message,resource_type,resource_id,read_at,created_at FROM notifications WHERE firm_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`, firmID, userID)
 	if e != nil {

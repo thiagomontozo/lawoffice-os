@@ -237,10 +237,12 @@ type AuditEvent struct {
 	CreatedAt    time.Time       `json:"createdAt"`
 }
 type SearchGroup struct {
-	Type     string `json:"type"`
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle"`
+	Type      string  `json:"type"`
+	ID        string  `json:"id"`
+	Title     string  `json:"title"`
+	Subtitle  string  `json:"subtitle"`
+	MatchedBy string  `json:"matchedBy"`
+	Score     float64 `json:"score"`
 }
 type ConflictResult struct {
 	Possible   bool            `json:"possible"`

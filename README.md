@@ -138,7 +138,7 @@ The dashboard prioritizes critical/today deadlines, hearings, assigned tasks, re
 
 ## Global Search
 
-The persistent search and Ctrl/Cmd+K command palette group authorized results for Matters, clients, contacts and documents. PostgreSQL `ILIKE` is the V0.1 implementation behind a replaceable search boundary.
+The persistent search and Ctrl/Cmd+K command palette rank and group authorized results for Matter titles, internal/case numbers, clients, contacts, documents, parties and tags. PostgreSQL trigram indexes and relevance scoring remain behind a replaceable search boundary without weakening firm or Matter permissions.
 
 ## Client Portal
 
