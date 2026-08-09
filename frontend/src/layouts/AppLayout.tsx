@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../app/AuthContext";
 import { api } from "../services/api";
+import { useRealtime } from "../hooks/useRealtime";
 const links = [
   ["/app", "Command Center", LayoutDashboard],
   ["/app/matters", "Matters", BriefcaseBusiness],
@@ -41,6 +42,7 @@ export function AppLayout() {
     { id: string; type: string; title: string; subtitle: string }[]
   >([]);
   const navigate = useNavigate();
+  const realtime = useRealtime();
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -159,6 +161,19 @@ export function AppLayout() {
             <span className="hidden sm:block">{session?.user.name}</span>
             <ChevronDown size={16} />
           </button>
+          <span
+            className={`hidden h-2.5 w-2.5 rounded-full sm:block ${realtime.connected ? "bg-emerald-500" : "bg-amber-400"}`}
+            title={
+              realtime.connected
+                ? "Atualizações em tempo real conectadas"
+                : "Reconectando atualizações"
+            }
+            aria-label={
+              realtime.connected
+                ? "Tempo real conectado"
+                : "Tempo real reconectando"
+            }
+          />
         </header>
         <main className="mx-auto max-w-[1500px] p-4 md:p-7">
           <Outlet />
@@ -215,6 +230,14 @@ export function AppLayout() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+      {realtime.latest && (
+        <div
+          role="status"
+          className="fixed bottom-5 right-5 z-50 max-w-sm rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-2xl"
+        >
+          Atualização recebida: {realtime.latest.resourceType}
         </div>
       )}
     </div>

@@ -20,7 +20,7 @@ flowchart LR
 
 Handlers decode bounded input and translate errors. Services enforce cross-resource rules such as Matter authorization and upload policy. Repositories own SQL and always receive `firmID`. Authentication middleware resolves a server-side session into a user plus roles/permissions. Domain objects remain independent of HTTP presentation.
 
-The scheduler is one cancellation-aware goroutine for the entire process, not one goroutine per deadline. It scans near-term deadlines/tasks and creates idempotent internal notifications. SIGINT/SIGTERM cancels the scheduler, closes SSE, drains HTTP and then closes PostgreSQL.
+The scheduler is one cancellation-aware goroutine for the entire process, not one goroutine per deadline. Each cycle takes a PostgreSQL transaction-scoped advisory lock, so only one API replica scans near-term deadlines/tasks while idempotent inserts provide a second safety layer. SIGINT/SIGTERM cancels the scheduler, closes SSE, drains HTTP and then closes PostgreSQL.
 
 ## Frontend
 
@@ -32,8 +32,8 @@ PostgreSQL holds relational state and authorization relationships. Composite `(i
 
 ## SSE and failure modes
 
-SSE delivers notification, timeline and task events for one API instance. Slow consumers have a bounded buffer and may miss events; PostgreSQL remains authoritative and clients refetch. On Redis/message-broker-free V0.1 deployments, multiple API replicas do not share realtime events. A database outage fails readiness and data operations. A storage outage fails readiness and document operations but does not redefine PostgreSQL as file storage.
+SSE delivers notification, timeline and task events with event IDs, heartbeats and a bounded in-memory replay window. PostgreSQL `LISTEN/NOTIFY` fans live events across API replicas without adding a broker; when the listener cannot start, the API logs degradation and falls back to local delivery. Slow consumers may miss events, and replay remains instance-local, so PostgreSQL is authoritative and clients refetch after gaps or reconnects routed to another replica. A database outage fails readiness and data operations. A storage outage fails readiness and document operations but does not redefine PostgreSQL as file storage.
 
 ## Future scale
 
-The next scale boundaries are S3/MinIO for shared objects, a durable pub/sub adapter for multi-instance SSE, a dedicated search implementation behind `SearchService`, and background jobs with explicit idempotency. These can evolve without splitting every domain into a service.
+The next scale boundaries are S3/MinIO for shared objects, a durable event log if cross-instance replay becomes necessary, a dedicated search implementation behind `SearchService`, and a separate job worker if scheduler volume grows. These can evolve without splitting every domain into a service.

@@ -1,4 +1,4 @@
-const base = import.meta.env.VITE_API_URL ?? "";
+export const apiBase = import.meta.env.VITE_API_URL ?? "";
 export class ApiError extends Error {
   constructor(
     public code: string,
@@ -15,7 +15,7 @@ export async function api<T>(
   const headers = new Headers(options.headers);
   if (options.body && !(options.body instanceof FormData))
     headers.set("Content-Type", "application/json");
-  const response = await fetch(`${base}${path}`, {
+  const response = await fetch(`${apiBase}${path}`, {
     ...options,
     headers,
     credentials: "include",

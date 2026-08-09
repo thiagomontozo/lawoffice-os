@@ -1063,9 +1063,28 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
-	events := h.Hub.Subscribe(r.Context(), u.FirmID)
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+	events, replay := h.Hub.Subscribe(r.Context(), u.FirmID, r.Header.Get("Last-Event-ID"))
 	_, _ = fmt.Fprint(w, "event: connected\ndata: {}\n\n")
 	flusher.Flush()
+	writeEvent := func(event realtime.Event) bool {
+		payload, err := json.Marshal(event)
+		if err != nil {
+			return false
+		}
+		_, err = fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", event.ID, event.Type, payload)
+		if err == nil {
+			flusher.Flush()
+		}
+		return err == nil
+	}
+	for _, event := range replay {
+		if !writeEvent(event) {
+			return
+		}
+	}
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
@@ -1074,8 +1093,13 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				return
 			}
-			payload, _ := json.Marshal(event)
-			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, payload)
+			if !writeEvent(event) {
+				return
+			}
+		case <-heartbeat.C:
+			if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}

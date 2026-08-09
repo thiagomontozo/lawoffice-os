@@ -48,6 +48,9 @@ func main() {
 	store := repository.New(db)
 	services := service.New(store, objects, cfg.MaxUpload)
 	hub := realtime.New()
+	if err = realtime.StartPostgres(ctx, db, hub, logger); err != nil {
+		logger.Warn("database realtime unavailable; using local delivery", "error", err)
+	}
 	handler := handlers.New(store, services, objects, db, cfg, logger, hub)
 	server := &http.Server{Addr: ":" + cfg.Port, Handler: router.New(handler, store, cfg), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
 	go scheduler.New(store, logger).Run(ctx)

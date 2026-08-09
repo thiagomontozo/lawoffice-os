@@ -42,7 +42,7 @@ flowchart LR
     API --> PG[(PostgreSQL)]
     API --> Storage[(Object Storage)]
     API --> Scheduler["Managed Scheduler"]
-    API --> SSE["In-process SSE Hub"]
+    API --> SSE["SSE Hub + PostgreSQL NOTIFY"]
 ```
 
 ```mermaid
@@ -263,7 +263,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 ## Limitations
 
 - The automated suite is intentionally focused on critical foundations and does not yet cover every handler or React interaction.
-- The in-process SSE hub is single-instance; multi-instance fan-out needs shared infrastructure.
+- PostgreSQL distributes live SSE events across replicas, but the bounded replay window remains instance-local rather than a durable event log.
 - Local object storage assumes a single shared filesystem and has no virus scanner or preview service.
 - Search is basic PostgreSQL matching without ranking, accent normalization or semantic search.
 - Portal administration and fine-grained sharing UI remain intentionally minimal.

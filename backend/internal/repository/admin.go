@@ -403,11 +403,37 @@ func (s *Store) CommandCenter(ctx context.Context, firmID, userID string) (domai
 	return x, nil
 }
 func (s *Store) PublishDueNotifications(ctx context.Context, horizon time.Time) (int, error) {
-	r, e := s.Pool.Exec(ctx, `INSERT INTO notifications(firm_id,user_id,type,title,message,resource_type,resource_id) SELECT d.firm_id,d.assigned_to,'deadline.approaching',d.title,'Deadline approaching','deadline',d.id FROM deadlines d WHERE d.assigned_to IS NOT NULL AND d.status='open' AND d.due_at<=$1 AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.firm_id=d.firm_id AND n.user_id=d.assigned_to AND n.resource_type='deadline' AND n.resource_id=d.id) UNION ALL SELECT t.firm_id,t.assigned_to,'task.overdue',t.title,'Task is overdue','task',t.id FROM tasks t WHERE t.assigned_to IS NOT NULL AND t.status NOT IN('done','cancelled') AND t.due_at<now() AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.firm_id=t.firm_id AND n.user_id=t.assigned_to AND n.resource_type='task' AND n.resource_id=t.id)`, horizon)
+	r, e := s.Pool.Exec(ctx, dueNotificationsSQL, horizon)
 	if e != nil {
 		return 0, e
 	}
 	return int(r.RowsAffected()), nil
+}
+
+const dueNotificationsSQL = `INSERT INTO notifications(firm_id,user_id,type,title,message,resource_type,resource_id) SELECT d.firm_id,d.assigned_to,'deadline.approaching',d.title,'Deadline approaching','deadline',d.id FROM deadlines d WHERE d.assigned_to IS NOT NULL AND d.status='open' AND d.due_at<=$1 AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.firm_id=d.firm_id AND n.user_id=d.assigned_to AND n.resource_type='deadline' AND n.resource_id=d.id) UNION ALL SELECT t.firm_id,t.assigned_to,'task.overdue',t.title,'Task is overdue','task',t.id FROM tasks t WHERE t.assigned_to IS NOT NULL AND t.status NOT IN('done','cancelled') AND t.due_at<now() AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.firm_id=t.firm_id AND n.user_id=t.assigned_to AND n.resource_type='task' AND n.resource_id=t.id)`
+
+func (s *Store) PublishDueNotificationsLocked(ctx context.Context, horizon time.Time) (int, bool, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	defer tx.Rollback(ctx)
+	var locked bool
+	if err = tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock($1)`, int64(734627091)).Scan(&locked); err != nil {
+		return 0, false, err
+	}
+	if !locked {
+		return 0, false, nil
+	}
+	result, err := tx.Exec(ctx, dueNotificationsSQL, horizon)
+	if err != nil {
+		return 0, true, err
+	}
+	count := int(result.RowsAffected())
+	if err = tx.Commit(ctx); err != nil {
+		return 0, true, err
+	}
+	return count, true, nil
 }
 func (s *Store) PortalMatter(ctx context.Context, firmID, portalUserID, matterID string) (domain.MatterDetail, error) {
 	var allowed bool
