@@ -180,7 +180,7 @@ The architecture includes privacy-oriented controls, but legal compliance depend
 
 ### Requirements
 
-- Go 1.24+
+- Go 1.25+
 - Node.js 24+
 - PostgreSQL 17+
 - Docker Compose is optional
