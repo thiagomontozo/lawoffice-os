@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+data/
+uploads/
+documents/
+*.log
+*.tmp
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+backend/bin/
+frontend/.vite/
