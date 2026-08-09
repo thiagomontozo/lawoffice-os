@@ -9,13 +9,17 @@
 5. **Document authorization:** firm, document, Matter and requested version are checked before storage opens.
 6. **Portal authorization:** separate sessions plus explicit `PortalAccess`; each event/document also needs client visibility.
 
-Disabling a user revokes their active sessions. Logout removes the server-side session. Production cookies use `Secure`, `HttpOnly` and `SameSite=Lax`; deployments should terminate TLS and rotate secrets.
+Disabling a user revokes their active sessions. Logout removes the server-side session. Cookies use `HttpOnly` and `SameSite=Strict`, add `Secure` in production and store only an HMAC hash server-side. Browser mutations with an `Origin` header must match the configured `WEB_ORIGIN`; this supplements SameSite cookies against cross-site request forgery. Authentication, setup and invitation-acceptance endpoints have bounded per-instance attempt limits.
+
+API responses set `nosniff`, deny framing, restrict referrers and browser capabilities, and use a restrictive API content security policy. GitHub security automation runs CodeQL extended queries, Go vulnerability analysis and an npm runtime dependency audit. Dependabot tracks Go, npm and GitHub Actions updates.
 
 ## Uploads
 
 Requests are bounded before reading. Allowed V0.1 types are PDF, DOCX, XLSX, PNG, JPEG, WEBP and plain text; branding accepts only PNG/JPEG/WEBP. Content sniffing and extension agreement reduce spoofing. UUID-based storage keys avoid trusting original names. The local adapter cleans paths, rejects absolute/traversal input and verifies root confinement.
 
 Virus scanning, content-disarm, encrypted object storage and retention automation are deployment or future-version responsibilities. Uploaded files are never executed.
+
+The built-in rate limiter is defense in depth for a single API instance. A production deployment should also enforce distributed rate limits and abuse controls at a trusted reverse proxy or gateway.
 
 ## Audit, deletion and logging
 

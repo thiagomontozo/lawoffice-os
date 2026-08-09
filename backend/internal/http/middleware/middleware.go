@@ -7,9 +7,12 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -41,6 +44,10 @@ func CORS(origin string, write ErrorWriter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			o := r.Header.Get("Origin")
+			if o != "" && o != origin && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+				write(w, r, http.StatusForbidden, "ORIGIN_NOT_ALLOWED", "Origin not allowed")
+				return
+			}
 			if o == origin {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -51,6 +58,8 @@ func CORS(origin string, write ErrorWriter) func(http.Handler) http.Handler {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("Referrer-Policy", "same-origin")
+			w.Header().Set("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
 			if r.Method == "OPTIONS" {
 				if o != origin {
 					write(w, r, 403, "ORIGIN_NOT_ALLOWED", "Origin not allowed")
@@ -62,6 +71,61 @@ func CORS(origin string, write ErrorWriter) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+type rateEntry struct {
+	count int
+	reset time.Time
+}
+
+// RateLimit creates a bounded, in-memory limiter for sensitive endpoints. It is
+// intentionally per instance; distributed deployments should use a shared edge
+// limiter in addition to this defense-in-depth control.
+func RateLimit(max int, window time.Duration, write ErrorWriter) func(http.Handler) http.Handler {
+	var mu sync.Mutex
+	entries := make(map[string]rateEntry)
+	lastSweep := time.Now()
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			now := time.Now()
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				host = r.RemoteAddr
+			}
+			mu.Lock()
+			if now.Sub(lastSweep) >= window {
+				for key, entry := range entries {
+					if !now.Before(entry.reset) {
+						delete(entries, key)
+					}
+				}
+				lastSweep = now
+			}
+			entry := entries[host]
+			if entry.reset.IsZero() || !now.Before(entry.reset) {
+				entry = rateEntry{reset: now.Add(window)}
+			}
+			entry.count++
+			entries[host] = entry
+			limited := entry.count > max
+			retryAfter := time.Until(entry.reset)
+			mu.Unlock()
+			if limited {
+				seconds := maxInt64(1, int64(retryAfter.Round(time.Second)/time.Second))
+				w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
+				write(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "Too many attempts; try again later")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 func Recover(logger *slog.Logger, write ErrorWriter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

@@ -1,0 +1,56 @@
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: backend/go.sum
+      - name: Scan Go dependencies
+        working-directory: backend
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Scan runtime npm dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+  codeql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
+          queries: security-extended
+      - uses: actions/setup-go@v6
+        if: matrix.language == 'go'
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: backend/go.sum
+      - name: Build Go for analysis
+        if: matrix.language == 'go'
+        working-directory: backend
+        run: go build ./...
+      - uses: github/codeql-action/analyze@v4

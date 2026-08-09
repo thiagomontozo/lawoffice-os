@@ -150,7 +150,7 @@ Important authentication, administration, Matter, document, branding, archive an
 
 ## Security Model
 
-Security is layered: authentication → firm isolation → RBAC → Matter authorization → document authorization → portal authorization. Uploads are size/MIME limited and stored under generated keys. Sensitive records use soft deletion. See [security model](docs/security-model.md).
+Security is layered: authentication → firm isolation → RBAC → Matter authorization → document authorization → portal authorization. Strict HttpOnly cookies, origin checks, sensitive-endpoint rate limits and browser security headers harden the HTTP boundary. Uploads are size/MIME limited and stored under generated keys. Sensitive records use soft deletion. CodeQL, Go vulnerability analysis, npm audit and Dependabot provide continuous repository checks. See [security model](docs/security-model.md).
 
 ## Privacy-Oriented Design
 
@@ -227,6 +227,7 @@ The first reliability milestone adds:
 - frontend type checking and production build;
 - `go vet`, Go build and race-enabled tests;
 - remote PostgreSQL and container builds in GitHub Actions.
+- CodeQL extended analysis, Go vulnerability scanning, npm runtime dependency audit and Dependabot updates.
 
 Run the local checks with:
 
@@ -267,6 +268,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 - Local object storage assumes a single shared filesystem and has no virus scanner or preview service.
 - Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
 - Portal invitations must be delivered by the firm; password recovery and per-field sharing controls are not yet available.
+- The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter and monitoring.
 - Scheduler notification rules are basic and do not calculate legal procedural deadlines.
 - No e-mail/SMS, calendar provider, court connector, OCR, AI, SSO or SaaS billing.
 

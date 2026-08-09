@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -16,10 +17,10 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config) http.H
 	r.Use(middleware.RealIP, appmw.RequestID, appmw.Recover(h.Logger, handlers.WriteError), appmw.Logging(h.Logger), appmw.CORS(cfg.WebOrigin, handlers.WriteError))
 	r.Get("/healthz", h.Health)
 	r.Get("/readyz", h.Ready)
-	r.Post("/api/v1/setup", h.Setup)
-	r.Post("/api/v1/auth/login", h.Login)
-	r.Post("/api/v1/portal/login", h.PortalLogin)
-	r.Post("/api/v1/portal/invitations/accept", h.AcceptPortalInvitation)
+	r.With(appmw.RateLimit(5, time.Hour, handlers.WriteError)).Post("/api/v1/setup", h.Setup)
+	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/auth/login", h.Login)
+	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/portal/login", h.PortalLogin)
+	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/portal/invitations/accept", h.AcceptPortalInvitation)
 	r.Post("/api/v1/portal/logout", h.PortalLogout)
 	r.Get("/api/v1/portal/matters", h.PortalMatters)
 	r.Get("/api/v1/portal/matters/{id}", h.PortalMatter)

@@ -152,14 +152,14 @@ func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, u domain.
 	if err = h.Store.CreateSession(r.Context(), u, hash, time.Now().Add(h.Config.SessionTTL)); err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: token, Path: "/", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteLaxMode, MaxAge: int(h.Config.SessionTTL.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: token, Path: "/", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteStrictMode, MaxAge: int(h.Config.SessionTTL.Seconds())})
 	return nil
 }
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if c, e := r.Cookie(SessionCookie); e == nil {
 		_ = h.Store.DeleteSession(r.Context(), auth.TokenHash(c.Value, h.Config.SessionSecret))
 	}
-	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Path: "/", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Path: "/", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	w.WriteHeader(204)
 }
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -1143,14 +1143,14 @@ func (h *Handler) PortalLogin(w http.ResponseWriter, r *http.Request) {
 	_ = h.Store.TouchPortalLogin(r.Context(), firmID, portalID)
 	ip, ua := auditContext(r)
 	_ = h.Store.AuditPortal(r.Context(), firmID, portalID, "portal.login", "portal_session", nil, ip, ua)
-	http.SetCookie(w, &http.Cookie{Name: portalCookie, Value: token, Path: "/api/v1/portal", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteLaxMode, MaxAge: int(h.Config.SessionTTL.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: portalCookie, Value: token, Path: "/api/v1/portal", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteStrictMode, MaxAge: int(h.Config.SessionTTL.Seconds())})
 	writeJSON(w, 200, map[string]string{"status": "authenticated"})
 }
 func (h *Handler) PortalLogout(w http.ResponseWriter, r *http.Request) {
 	if c, e := r.Cookie(portalCookie); e == nil {
 		_ = h.Store.DeletePortalSession(r.Context(), auth.TokenHash(c.Value, h.Config.SessionSecret))
 	}
-	http.SetCookie(w, &http.Cookie{Name: portalCookie, Path: "/api/v1/portal", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: portalCookie, Path: "/api/v1/portal", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	w.WriteHeader(204)
 }
 func (h *Handler) portalIdentity(r *http.Request) (string, string, error) {
