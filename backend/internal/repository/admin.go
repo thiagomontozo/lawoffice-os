@@ -213,7 +213,7 @@ func (s *Store) UpdateUserRoles(ctx context.Context, firmID, userID string, role
 
 func (s *Store) UpdateTaskStatus(ctx context.Context, firmID, userID, id, status string) error {
 	var matterID *string
-	err := s.Pool.QueryRow(ctx, `UPDATE tasks SET status=$3,completed_at=CASE WHEN $3='done' THEN now() ELSE NULL END WHERE firm_id=$1 AND id=$2 RETURNING matter_id`, firmID, id, status).Scan(&matterID)
+	err := s.Pool.QueryRow(ctx, `UPDATE tasks SET status=$3::varchar,completed_at=CASE WHEN $3::varchar='done' THEN now() ELSE NULL END WHERE firm_id=$1 AND id=$2 RETURNING matter_id`, firmID, id, status).Scan(&matterID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -225,7 +225,7 @@ func (s *Store) UpdateTaskStatus(ctx context.Context, firmID, userID, id, status
 
 func (s *Store) UpdateDeadlineStatus(ctx context.Context, firmID, userID, id, status string) error {
 	var matterID string
-	err := s.Pool.QueryRow(ctx, `UPDATE deadlines SET status=$3,completed_at=CASE WHEN $3='completed' THEN now() ELSE NULL END WHERE firm_id=$1 AND id=$2 RETURNING matter_id`, firmID, id, status).Scan(&matterID)
+	err := s.Pool.QueryRow(ctx, `UPDATE deadlines SET status=$3::varchar,completed_at=CASE WHEN $3::varchar='completed' THEN now() ELSE NULL END WHERE firm_id=$1 AND id=$2 RETURNING matter_id`, firmID, id, status).Scan(&matterID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
