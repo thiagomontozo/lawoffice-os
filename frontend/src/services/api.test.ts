@@ -3,14 +3,12 @@ import { ApiError, api } from "./api";
 afterEach(() => vi.unstubAllGlobals());
 describe("api client", () => {
   it("sends credentials and decodes successful JSON", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     await expect(api<{ ok: boolean }>("/api/v1/example")).resolves.toEqual({
       ok: true,
@@ -23,16 +21,14 @@ describe("api client", () => {
   it("turns the standard error envelope into ApiError", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              error: { code: "FORBIDDEN", message: "Access denied" },
-            }),
-            { status: 403 },
-          ),
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { code: "FORBIDDEN", message: "Access denied" },
+          }),
+          { status: 403 },
         ),
+      ),
     );
     const request = api("/api/v1/restricted");
     await expect(request).rejects.toBeInstanceOf(ApiError);
