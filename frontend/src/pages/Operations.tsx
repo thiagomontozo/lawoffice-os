@@ -1,13 +1,510 @@
-import{useEffect,useState}from'react';import{Archive,CalendarDays,CheckCircle2,FileSearch,GanttChartSquare,Plus,ShieldAlert,Users,WalletCards}from'lucide-react';import{Badge,Button,Card,Empty,Loading,PageHeader}from'../app/ui';import{api,post}from'../services/api';import type{Deadline,DocumentItem,Matter,Task}from'../types';
-export function ClientsPage(){return <ResourcePage title="Clientes" description="Pessoas, empresas e seus relacionamentos jurídicos." endpoint="/api/v1/clients" icon={<Users/>} columns={['name','type','document','email']}/>}
-export function DocumentsPage(){return <ResourcePage title="Document Center" description="Arquivo pesquisável, metadados, versões e visibilidade ao cliente." endpoint="/api/v1/documents" icon={<FileSearch/>} columns={['title','category','versionNumber','originalFileName']}/>}
-export function TasksPage(){return <ResourcePage title="Tarefas" description="Atividades jurídicas e internas, com prioridade e responsável." endpoint="/api/v1/tasks" icon={<CheckCircle2/>} columns={['title','matterTitle','status','priority','dueAt']}/>}
-export function UsersPage(){return <ResourcePage title="Usuários" description="Contas internas, atividade e vínculo de papéis." endpoint="/api/v1/users" icon={<Users/>} columns={['name','email','active','roles']}/>}
-export function RolesPage(){return <ResourcePage title="Papéis e permissões" description="RBAC personalizável que complementa a segurança por Matter." endpoint="/api/v1/roles" icon={<ShieldAlert/>} columns={['name','description','permissions']}/>}
-export function AuditPage(){return <ResourcePage title="Audit Trail" description="Registro imutável das ações administrativas e jurídicas relevantes." endpoint="/api/v1/audit" icon={<ShieldAlert/>} columns={['createdAt','action','resourceType','userName']}/>}
-export function WorkflowsPage(){const[name,setName]=useState('Fluxo Contencioso');const[stages,setStages]=useState([{name:'Cadastro',description:'Triagem inicial',color:'#64748B'},{name:'Análise',description:'Estratégia e documentos',color:'#2563EB'},{name:'Produção',description:'Elaboração da peça',color:'#7C3AED'},{name:'Revisão',description:'Revisão por responsável',color:'#D97706'},{name:'Protocolo',description:'Envio e comprovantes',color:'#059669'}]);const[saved,setSaved]=useState(false);function move(index:number,direction:number){const next=[...stages];const target=index+direction;if(target<0||target>=next.length)return;const current=next[index];const other=next[target];if(!current||!other)return;next[index]=other;next[target]=current;setStages(next)}async function save(){await post('/api/v1/workflows',{name,description:'Workflow configurado no builder visual',stages:stages.map((s,index)=>({...s,sortOrder:index,checklist:[],onEnterTasks:index===3?[{title:'Revisar peça',dueInDays:2,defaultRole:'Partner'}]:[]}))});setSaved(true)}return <><PageHeader title="Workflow Builder" description="Organize estágios, checklists e tarefas automáticas sem uma engine de scripts." action={<Button onClick={()=>void save()}>{saved?'Workflow salvo':'Salvar workflow'}</Button>}/><div className="grid gap-6 xl:grid-cols-[300px_1fr]"><Card><label className="text-sm font-medium">Nome<input value={name} onChange={e=>setName(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2.5"/></label><p className="mt-5 text-sm font-medium">Automação de exemplo</p><div className="mt-2 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Ao entrar em <b>Revisão</b>, criar “Revisar peça”, atribuir a Partner e definir prazo interno de 2 dias.</div><button onClick={()=>setStages([...stages,{name:'Novo estágio',description:'Descreva o objetivo',color:'#64748B'}])} className="mt-5 flex w-full items-center justify-center rounded-xl border border-dashed p-3 text-sm font-semibold text-brand-primary"><Plus size={16} className="mr-2"/>Adicionar estágio</button></Card><Card className="overflow-x-auto"><div className="flex min-w-max items-stretch gap-3">{stages.map((stage,index)=><div draggable key={`${stage.name}-${index}`} className="w-56 rounded-2xl border bg-white p-4 shadow-sm" style={{borderTop:`5px solid ${stage.color}`}}><div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-400">{index+1}</span><div><button aria-label="Mover para esquerda" onClick={()=>move(index,-1)} className="px-1">←</button><button aria-label="Mover para direita" onClick={()=>move(index,1)} className="px-1">→</button></div></div><input value={stage.name} onChange={e=>setStages(stages.map((x,i)=>i===index?{...x,name:e.target.value}:x))} className="mt-3 w-full font-bold outline-none"/><textarea value={stage.description} onChange={e=>setStages(stages.map((x,i)=>i===index?{...x,description:e.target.value}:x))} className="mt-2 min-h-20 w-full resize-none text-sm text-slate-500 outline-none"/><label className="mt-3 flex items-center gap-2 text-xs">Cor<input type="color" value={stage.color} onChange={e=>setStages(stages.map((x,i)=>i===index?{...x,color:e.target.value}:x))}/></label></div>)}</div></Card></div></>}
-export function CalendarPage(){const[view,setView]=useState('month');return <><PageHeader title="Calendário jurídico" description="Prazos, audiências, tarefas e eventos em uma visão integrada." action={<Button><Plus size={16} className="mr-2 inline"/>Novo evento</Button>}/><Card><div className="flex flex-wrap gap-2">{['day','week','month','agenda'].map(x=><button key={x} onClick={()=>setView(x)} className={`rounded-lg px-4 py-2 text-sm ${view===x?'bg-brand-primary text-white':'bg-slate-100'}`}>{x}</button>)}</div><div className="mt-6 grid grid-cols-7 gap-px overflow-hidden rounded-xl bg-slate-200">{['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(x=><div key={x} className="bg-slate-50 p-3 text-center text-xs font-semibold">{x}</div>)}{Array.from({length:35},(_,i)=><div key={i} className="min-h-28 bg-white p-2"><span className="text-xs text-slate-400">{i+1}</span>{i===8&&<div className="mt-2 rounded bg-red-100 p-1 text-xs text-red-800">Prazo · Contestação</div>}{i===15&&<div className="mt-2 rounded bg-blue-100 p-1 text-xs text-blue-800">Audiência</div>}</div>)}</div></Card></>}
-export function ConflictPage(){const[term,setTerm]=useState('');const[result,setResult]=useState<{possible:boolean;matches:{name:string;relationship:string;matterTitle?:string}[];disclaimer:string}>();async function search(){setResult(await post('/api/v1/conflicts/check',{name:term,document:'',relatedNames:[]}))}return <><PageHeader title="Conflict Check" description="Identifique possíveis relações antes de aceitar cliente ou Matter."/><div className="grid gap-6 lg:grid-cols-[.7fr_1.3fr]"><Card><label className="text-sm font-medium">Nome, empresa ou documento<input value={term} onChange={e=>setTerm(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2.5"/></label><Button onClick={()=>void search()} className="mt-4 w-full">Verificar possíveis conflitos</Button><p className="mt-4 text-xs text-slate-500">O resultado é um apoio de triagem. A decisão profissional continua humana.</p></Card><Card>{!result?<Empty title="Aguardando consulta" description="Pesquise clientes, contatos, partes e Matters ativos ou arquivados."/>:result.possible?<><div className="mb-5 flex items-center gap-3 text-amber-800"><ShieldAlert/><h2 className="text-lg font-bold">Possible conflict</h2></div>{result.matches.map((m,i)=><div key={`${m.name}-${i}`} className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="font-semibold">{m.name}</p><p className="text-sm text-amber-800">{m.relationship}{m.matterTitle&&` · ${m.matterTitle}`}</p></div>)}<p className="mt-4 text-xs text-slate-500">{result.disclaimer}</p></>:<div className="py-12 text-center"><CheckCircle2 className="mx-auto text-emerald-600" size={42}/><h2 className="mt-4 text-xl font-bold">No conflict found</h2><p className="mt-2 text-slate-500">Nenhuma correspondência foi localizada nas fontes consultadas.</p></div>}</Card></div></>}
-export function ArchivePage(){return <ResourcePage title="Legal Archive" description="Matters encerrados permanecem pesquisáveis, auditáveis e sujeitos às permissões." endpoint="/api/v1/matters?archived=true" icon={<Archive/>} columns={['title','type','legalAreaName','responsibleName','archivedAt']}/>}
-export function FinancePage(){return <><PageHeader title="Financeiro operacional" description="Honorários, pagamentos, custas e despesas vinculados a Matters."/><div className="grid gap-4 md:grid-cols-3"><Stat label="Honorários em aberto" value="R$ 0,00"/><Stat label="Recebido no mês" value="R$ 0,00"/><Stat label="Custas e despesas" value="R$ 0,00"/></div><Card className="mt-6"><div className="flex items-center gap-3"><WalletCards/><h2 className="font-bold">Lançamentos por Matter</h2></div><Empty title="Sem lançamentos no período" description="Valores são armazenados em centavos e não representam contabilidade oficial."/></Card></>}
-function ResourcePage({title,description,endpoint,icon,columns}:{title:string;description:string;endpoint:string;icon:React.ReactNode;columns:string[]}){const[items,setItems]=useState<Record<string,unknown>[]>([]);const[loading,setLoading]=useState(true);useEffect(()=>{void api<{items:Record<string,unknown>[]}>(endpoint).then(x=>setItems(x.items??[])).finally(()=>setLoading(false))},[endpoint]);return <><PageHeader title={title} description={description} action={<Button><Plus size={16} className="mr-2 inline"/>Adicionar</Button>}/>{loading?<Loading/>:items.length===0?<Empty title={`Nenhum registro em ${title}`} description="Quando novos registros forem criados, eles aparecerão nesta visão."/>:<Card className="overflow-x-auto p-0"><table className="w-full min-w-[700px] text-left"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{columns.map(c=><th className="px-5 py-4" key={c}>{c}</th>)}</tr></thead><tbody className="divide-y">{items.map((item,index)=><tr key={String(item.id??index)}>{columns.map(c=><td className="max-w-sm truncate px-5 py-4 text-sm" key={c}>{render(item[c])}</td>)}</tr>)}</tbody></table></Card>}</>};function render(v:unknown){if(Array.isArray(v))return v.join(', ');if(typeof v==='boolean')return <Badge tone={v?'green':'slate'}>{v?'ativo':'inativo'}</Badge>;if(typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(v))return new Date(v).toLocaleString('pt-BR');return String(v??'—')};function Stat({label,value}:{label:string;value:string}){return <Card><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></Card>}
+import { useEffect, useState } from "react";
+import {
+  Archive,
+  CalendarDays,
+  CheckCircle2,
+  FileSearch,
+  GanttChartSquare,
+  Plus,
+  ShieldAlert,
+  Users,
+  WalletCards,
+} from "lucide-react";
+import { Badge, Button, Card, Empty, Loading, PageHeader } from "../app/ui";
+import { api, post } from "../services/api";
+import type { Deadline, DocumentItem, Matter, Task } from "../types";
+export function ClientsPage() {
+  return (
+    <ResourcePage
+      title="Clientes"
+      description="Pessoas, empresas e seus relacionamentos jurídicos."
+      endpoint="/api/v1/clients"
+      icon={<Users />}
+      columns={["name", "type", "document", "email"]}
+    />
+  );
+}
+export function DocumentsPage() {
+  return (
+    <ResourcePage
+      title="Document Center"
+      description="Arquivo pesquisável, metadados, versões e visibilidade ao cliente."
+      endpoint="/api/v1/documents"
+      icon={<FileSearch />}
+      columns={["title", "category", "versionNumber", "originalFileName"]}
+    />
+  );
+}
+export function TasksPage() {
+  return (
+    <ResourcePage
+      title="Tarefas"
+      description="Atividades jurídicas e internas, com prioridade e responsável."
+      endpoint="/api/v1/tasks"
+      icon={<CheckCircle2 />}
+      columns={["title", "matterTitle", "status", "priority", "dueAt"]}
+    />
+  );
+}
+export function UsersPage() {
+  return (
+    <ResourcePage
+      title="Usuários"
+      description="Contas internas, atividade e vínculo de papéis."
+      endpoint="/api/v1/users"
+      icon={<Users />}
+      columns={["name", "email", "active", "roles"]}
+    />
+  );
+}
+export function RolesPage() {
+  return (
+    <ResourcePage
+      title="Papéis e permissões"
+      description="RBAC personalizável que complementa a segurança por Matter."
+      endpoint="/api/v1/roles"
+      icon={<ShieldAlert />}
+      columns={["name", "description", "permissions"]}
+    />
+  );
+}
+export function AuditPage() {
+  return (
+    <ResourcePage
+      title="Audit Trail"
+      description="Registro imutável das ações administrativas e jurídicas relevantes."
+      endpoint="/api/v1/audit"
+      icon={<ShieldAlert />}
+      columns={["createdAt", "action", "resourceType", "userName"]}
+    />
+  );
+}
+export function WorkflowsPage() {
+  const [name, setName] = useState("Fluxo Contencioso");
+  const [stages, setStages] = useState([
+    { name: "Cadastro", description: "Triagem inicial", color: "#64748B" },
+    {
+      name: "Análise",
+      description: "Estratégia e documentos",
+      color: "#2563EB",
+    },
+    { name: "Produção", description: "Elaboração da peça", color: "#7C3AED" },
+    {
+      name: "Revisão",
+      description: "Revisão por responsável",
+      color: "#D97706",
+    },
+    {
+      name: "Protocolo",
+      description: "Envio e comprovantes",
+      color: "#059669",
+    },
+  ]);
+  const [saved, setSaved] = useState(false);
+  function move(index: number, direction: number) {
+    const next = [...stages];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    const current = next[index];
+    const other = next[target];
+    if (!current || !other) return;
+    next[index] = other;
+    next[target] = current;
+    setStages(next);
+  }
+  async function save() {
+    await post("/api/v1/workflows", {
+      name,
+      description: "Workflow configurado no builder visual",
+      stages: stages.map((s, index) => ({
+        ...s,
+        sortOrder: index,
+        checklist: [],
+        onEnterTasks:
+          index === 3
+            ? [{ title: "Revisar peça", dueInDays: 2, defaultRole: "Partner" }]
+            : [],
+      })),
+    });
+    setSaved(true);
+  }
+  return (
+    <>
+      <PageHeader
+        title="Workflow Builder"
+        description="Organize estágios, checklists e tarefas automáticas sem uma engine de scripts."
+        action={
+          <Button onClick={() => void save()}>
+            {saved ? "Workflow salvo" : "Salvar workflow"}
+          </Button>
+        }
+      />
+      <div className="grid gap-6 xl:grid-cols-[300px_1fr]">
+        <Card>
+          <label className="text-sm font-medium">
+            Nome
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-2 w-full rounded-xl border px-3 py-2.5"
+            />
+          </label>
+          <p className="mt-5 text-sm font-medium">Automação de exemplo</p>
+          <div className="mt-2 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+            Ao entrar em <b>Revisão</b>, criar “Revisar peça”, atribuir a
+            Partner e definir prazo interno de 2 dias.
+          </div>
+          <button
+            onClick={() =>
+              setStages([
+                ...stages,
+                {
+                  name: "Novo estágio",
+                  description: "Descreva o objetivo",
+                  color: "#64748B",
+                },
+              ])
+            }
+            className="mt-5 flex w-full items-center justify-center rounded-xl border border-dashed p-3 text-sm font-semibold text-brand-primary"
+          >
+            <Plus size={16} className="mr-2" />
+            Adicionar estágio
+          </button>
+        </Card>
+        <Card className="overflow-x-auto">
+          <div className="flex min-w-max items-stretch gap-3">
+            {stages.map((stage, index) => (
+              <div
+                draggable
+                key={`${stage.name}-${index}`}
+                className="w-56 rounded-2xl border bg-white p-4 shadow-sm"
+                style={{ borderTop: `5px solid ${stage.color}` }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400">
+                    {index + 1}
+                  </span>
+                  <div>
+                    <button
+                      aria-label="Mover para esquerda"
+                      onClick={() => move(index, -1)}
+                      className="px-1"
+                    >
+                      ←
+                    </button>
+                    <button
+                      aria-label="Mover para direita"
+                      onClick={() => move(index, 1)}
+                      className="px-1"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+                <input
+                  value={stage.name}
+                  onChange={(e) =>
+                    setStages(
+                      stages.map((x, i) =>
+                        i === index ? { ...x, name: e.target.value } : x,
+                      ),
+                    )
+                  }
+                  className="mt-3 w-full font-bold outline-none"
+                />
+                <textarea
+                  value={stage.description}
+                  onChange={(e) =>
+                    setStages(
+                      stages.map((x, i) =>
+                        i === index ? { ...x, description: e.target.value } : x,
+                      ),
+                    )
+                  }
+                  className="mt-2 min-h-20 w-full resize-none text-sm text-slate-500 outline-none"
+                />
+                <label className="mt-3 flex items-center gap-2 text-xs">
+                  Cor
+                  <input
+                    type="color"
+                    value={stage.color}
+                    onChange={(e) =>
+                      setStages(
+                        stages.map((x, i) =>
+                          i === index ? { ...x, color: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </>
+  );
+}
+export function CalendarPage() {
+  const [view, setView] = useState("month");
+  return (
+    <>
+      <PageHeader
+        title="Calendário jurídico"
+        description="Prazos, audiências, tarefas e eventos em uma visão integrada."
+        action={
+          <Button>
+            <Plus size={16} className="mr-2 inline" />
+            Novo evento
+          </Button>
+        }
+      />
+      <Card>
+        <div className="flex flex-wrap gap-2">
+          {["day", "week", "month", "agenda"].map((x) => (
+            <button
+              key={x}
+              onClick={() => setView(x)}
+              className={`rounded-lg px-4 py-2 text-sm ${view === x ? "bg-brand-primary text-white" : "bg-slate-100"}`}
+            >
+              {x}
+            </button>
+          ))}
+        </div>
+        <div className="mt-6 grid grid-cols-7 gap-px overflow-hidden rounded-xl bg-slate-200">
+          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((x) => (
+            <div
+              key={x}
+              className="bg-slate-50 p-3 text-center text-xs font-semibold"
+            >
+              {x}
+            </div>
+          ))}
+          {Array.from({ length: 35 }, (_, i) => (
+            <div key={i} className="min-h-28 bg-white p-2">
+              <span className="text-xs text-slate-400">{i + 1}</span>
+              {i === 8 && (
+                <div className="mt-2 rounded bg-red-100 p-1 text-xs text-red-800">
+                  Prazo · Contestação
+                </div>
+              )}
+              {i === 15 && (
+                <div className="mt-2 rounded bg-blue-100 p-1 text-xs text-blue-800">
+                  Audiência
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </>
+  );
+}
+export function ConflictPage() {
+  const [term, setTerm] = useState("");
+  const [result, setResult] = useState<{
+    possible: boolean;
+    matches: { name: string; relationship: string; matterTitle?: string }[];
+    disclaimer: string;
+  }>();
+  async function search() {
+    setResult(
+      await post("/api/v1/conflicts/check", {
+        name: term,
+        document: "",
+        relatedNames: [],
+      }),
+    );
+  }
+  return (
+    <>
+      <PageHeader
+        title="Conflict Check"
+        description="Identifique possíveis relações antes de aceitar cliente ou Matter."
+      />
+      <div className="grid gap-6 lg:grid-cols-[.7fr_1.3fr]">
+        <Card>
+          <label className="text-sm font-medium">
+            Nome, empresa ou documento
+            <input
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              className="mt-2 w-full rounded-xl border px-3 py-2.5"
+            />
+          </label>
+          <Button onClick={() => void search()} className="mt-4 w-full">
+            Verificar possíveis conflitos
+          </Button>
+          <p className="mt-4 text-xs text-slate-500">
+            O resultado é um apoio de triagem. A decisão profissional continua
+            humana.
+          </p>
+        </Card>
+        <Card>
+          {!result ? (
+            <Empty
+              title="Aguardando consulta"
+              description="Pesquise clientes, contatos, partes e Matters ativos ou arquivados."
+            />
+          ) : result.possible ? (
+            <>
+              <div className="mb-5 flex items-center gap-3 text-amber-800">
+                <ShieldAlert />
+                <h2 className="text-lg font-bold">Possible conflict</h2>
+              </div>
+              {result.matches.map((m, i) => (
+                <div
+                  key={`${m.name}-${i}`}
+                  className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                >
+                  <p className="font-semibold">{m.name}</p>
+                  <p className="text-sm text-amber-800">
+                    {m.relationship}
+                    {m.matterTitle && ` · ${m.matterTitle}`}
+                  </p>
+                </div>
+              ))}
+              <p className="mt-4 text-xs text-slate-500">{result.disclaimer}</p>
+            </>
+          ) : (
+            <div className="py-12 text-center">
+              <CheckCircle2 className="mx-auto text-emerald-600" size={42} />
+              <h2 className="mt-4 text-xl font-bold">No conflict found</h2>
+              <p className="mt-2 text-slate-500">
+                Nenhuma correspondência foi localizada nas fontes consultadas.
+              </p>
+            </div>
+          )}
+        </Card>
+      </div>
+    </>
+  );
+}
+export function ArchivePage() {
+  return (
+    <ResourcePage
+      title="Legal Archive"
+      description="Matters encerrados permanecem pesquisáveis, auditáveis e sujeitos às permissões."
+      endpoint="/api/v1/matters?archived=true"
+      icon={<Archive />}
+      columns={[
+        "title",
+        "type",
+        "legalAreaName",
+        "responsibleName",
+        "archivedAt",
+      ]}
+    />
+  );
+}
+export function FinancePage() {
+  return (
+    <>
+      <PageHeader
+        title="Financeiro operacional"
+        description="Honorários, pagamentos, custas e despesas vinculados a Matters."
+      />
+      <div className="grid gap-4 md:grid-cols-3">
+        <Stat label="Honorários em aberto" value="R$ 0,00" />
+        <Stat label="Recebido no mês" value="R$ 0,00" />
+        <Stat label="Custas e despesas" value="R$ 0,00" />
+      </div>
+      <Card className="mt-6">
+        <div className="flex items-center gap-3">
+          <WalletCards />
+          <h2 className="font-bold">Lançamentos por Matter</h2>
+        </div>
+        <Empty
+          title="Sem lançamentos no período"
+          description="Valores são armazenados em centavos e não representam contabilidade oficial."
+        />
+      </Card>
+    </>
+  );
+}
+function ResourcePage({
+  title,
+  description,
+  endpoint,
+  icon,
+  columns,
+}: {
+  title: string;
+  description: string;
+  endpoint: string;
+  icon: React.ReactNode;
+  columns: string[];
+}) {
+  const [items, setItems] = useState<Record<string, unknown>[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    void api<{ items: Record<string, unknown>[] }>(endpoint)
+      .then((x) => setItems(x.items ?? []))
+      .finally(() => setLoading(false));
+  }, [endpoint]);
+  return (
+    <>
+      <PageHeader
+        title={title}
+        description={description}
+        action={
+          <Button>
+            <Plus size={16} className="mr-2 inline" />
+            Adicionar
+          </Button>
+        }
+      />
+      {loading ? (
+        <Loading />
+      ) : items.length === 0 ? (
+        <Empty
+          title={`Nenhum registro em ${title}`}
+          description="Quando novos registros forem criados, eles aparecerão nesta visão."
+        />
+      ) : (
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full min-w-[700px] text-left">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <tr>
+                {columns.map((c) => (
+                  <th className="px-5 py-4" key={c}>
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {items.map((item, index) => (
+                <tr key={String(item.id ?? index)}>
+                  {columns.map((c) => (
+                    <td className="max-w-sm truncate px-5 py-4 text-sm" key={c}>
+                      {render(item[c])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </>
+  );
+}
+function render(v: unknown) {
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "boolean")
+    return (
+      <Badge tone={v ? "green" : "slate"}>{v ? "ativo" : "inativo"}</Badge>
+    );
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v))
+    return new Date(v).toLocaleString("pt-BR");
+  return String(v ?? "—");
+}
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-bold">{value}</p>
+    </Card>
+  );
+}

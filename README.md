@@ -2,7 +2,7 @@
 
 > White-label legal practice management platform built with Go, React and TypeScript.
 
-**Current status: Experimental.** LawOffice OS is a portfolio-grade systems and product engineering project. It is not production-ready and has not yet gone through automated or runtime validation.
+**Current status: Experimental.** LawOffice OS is a portfolio-grade systems and product engineering project. The repository now has initial automated tests and CI, but it is not production-ready and still requires deployment-specific security and operational validation.
 
 ## Overview
 
@@ -161,7 +161,7 @@ The architecture includes privacy-oriented controls, but legal compliance depend
 ### Requirements
 
 - Go 1.24+
-- Node.js 22+
+- Node.js 24+
 - PostgreSQL 17+
 - Docker Compose is optional
 
@@ -215,7 +215,35 @@ The initial migration creates the multi-firm relational model, constraints, inde
 
 ## Docker
 
-The repository includes multi-stage backend/frontend Dockerfiles and a Compose topology for PostgreSQL, API, web and persistent document storage. These definitions were created but intentionally not executed during V0.1 authoring.
+The repository includes multi-stage backend/frontend Dockerfiles and a Compose topology for PostgreSQL, API, web and persistent document storage. CI builds both images. A local Compose validation requires Docker Desktop or another compatible daemon.
+
+## Testing and CI
+
+The first reliability milestone adds:
+
+- Go unit tests for password/session handling, configuration and local storage safety;
+- PostgreSQL integration coverage for firm isolation, restricted Matter access and document authorization;
+- Vitest coverage for the typed API client and standard error envelope;
+- frontend type checking and production build;
+- `go vet`, Go build and race-enabled tests;
+- remote PostgreSQL and container builds in GitHub Actions.
+
+Run the local checks with:
+
+```bash
+cd backend
+go vet ./...
+go test ./...
+go build -o ../.tools/lawoffice-api ./cmd/api
+
+cd ../frontend
+npm ci --ignore-scripts
+npm run format:check
+npm test
+npm run build
+```
+
+Repository integration tests use `TEST_DATABASE_URL`. Without it they skip safely; CI always supplies an isolated PostgreSQL service.
 
 ## Project Structure
 
@@ -234,7 +262,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 
 ## Limitations
 
-- No automated tests, CI, local build or runtime validation in this milestone.
+- The automated suite is intentionally focused on critical foundations and does not yet cover every handler or React interaction.
 - The in-process SSE hub is single-instance; multi-instance fan-out needs shared infrastructure.
 - Local object storage assumes a single shared filesystem and has no virus scanner or preview service.
 - Search is basic PostgreSQL matching without ranking, accent normalization or semantic search.
@@ -246,7 +274,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 
 ### v0.2
 
-- automated tests and GitHub Actions
+- broader handler, browser and accessibility test coverage
 - e-mail notifications
 - richer custom fields
 - PDF report generation

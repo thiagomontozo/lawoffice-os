@@ -15,3 +15,5 @@ documents/
 Thumbs.db
 backend/bin/
 frontend/.vite/
+*.tsbuildinfo
+.tools/

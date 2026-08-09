@@ -1,2 +1,41 @@
-@tailwind base;@tailwind components;@tailwind utilities;
-:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#172033;background:#f5f7fb;--brand-primary:#17324D;--brand-secondary:#334E68;--brand-accent:#C9A227}*{box-sizing:border-box}body{margin:0;min-width:320px;min-height:100vh}button,a,input,select,textarea{outline-color:var(--brand-primary)}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-primary),transparent 65%);outline-offset:2px}.scrollbar::-webkit-scrollbar{width:8px}.scrollbar::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #172033;
+  background: #f5f7fb;
+  --brand-primary: #17324d;
+  --brand-secondary: #334e68;
+  --brand-accent: #c9a227;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+button,
+a,
+input,
+select,
+textarea {
+  outline-color: var(--brand-primary);
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary), transparent 65%);
+  outline-offset: 2px;
+}
+.scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 99px;
+}
