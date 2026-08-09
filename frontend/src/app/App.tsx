@@ -22,7 +22,12 @@ import {
 } from "../pages/ManagementPages";
 import { DocumentsPage } from "../pages/DocumentsPage";
 import { BrandingPage } from "../pages/Branding";
-import { PortalHome, PortalMatter } from "../pages/Portal";
+import {
+  PortalAcceptInvitation,
+  PortalHome,
+  PortalMatter,
+} from "../pages/Portal";
+import { PortalManagementPage } from "../pages/PortalManagement";
 import { SettingsPage } from "../pages/Settings";
 function Protected() {
   const { session, loading } = useAuth();
@@ -36,6 +41,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/setup" element={<SetupPage />} />
       <Route path="/portal/login" element={<PortalLogin />} />
+      <Route path="/portal/accept" element={<PortalAcceptInvitation />} />
       <Route path="/portal" element={<PortalHome />} />
       <Route path="/portal/matters/:id" element={<PortalMatter />} />
       <Route element={<Protected />}>
@@ -58,6 +64,7 @@ export default function App() {
         <Route path="/app/audit" element={<AuditPage />} />
         <Route path="/app/branding" element={<BrandingPage />} />
         <Route path="/app/settings" element={<SettingsPage />} />
+        <Route path="/app/portal" element={<PortalManagementPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

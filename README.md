@@ -142,7 +142,7 @@ The persistent search and Ctrl/Cmd+K command palette rank and group authorized r
 
 ## Client Portal
 
-Portal users have separate credentials and sessions. A `PortalAccess` grant links a user to a Matter and defines shareable summary/timeline/appointments. Documents and events need an explicit `clientVisible` flag. The portal uses firm branding.
+Portal users have separate credentials and sessions. An administrator creates a 72-hour, single-use invitation and the client defines their own password. A `PortalAccess` grant links that identity to selected Matters and defines shareable summary, timeline and appointments. Documents and events need an explicit `clientVisible` flag, downloads repeat authorization checks, revocation invalidates existing sessions, and the portal uses firm branding.
 
 ## Audit Trail
 
@@ -182,7 +182,7 @@ After login, a practical first-use path is:
 3. Run **Conflict Check** for the prospective client.
 4. Register the client and create a Matter.
 5. Add parties, deadlines, tasks and document versions from Matter Detail.
-6. Configure a workflow and, when appropriate, grant selected client portal access.
+6. Configure a workflow and, when appropriate, open **Portal do Cliente**, select a client and the Matters to share, then send the one-time invitation link through a trusted channel.
 
 No real legal data should be used until deployment security, backups and validation are reviewed.
 
@@ -265,8 +265,8 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 - The automated suite is intentionally focused on critical foundations and does not yet cover every handler or React interaction.
 - PostgreSQL distributes live SSE events across replicas, but the bounded replay window remains instance-local rather than a durable event log.
 - Local object storage assumes a single shared filesystem and has no virus scanner or preview service.
-- Search is basic PostgreSQL matching without ranking, accent normalization or semantic search.
-- Portal administration and fine-grained sharing UI remain intentionally minimal.
+- Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
+- Portal invitations must be delivered by the firm; password recovery and per-field sharing controls are not yet available.
 - Scheduler notification rules are basic and do not calculate legal procedural deadlines.
 - No e-mail/SMS, calendar provider, court connector, OCR, AI, SSO or SaaS billing.
 

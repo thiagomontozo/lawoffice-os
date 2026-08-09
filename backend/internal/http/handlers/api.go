@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -1139,6 +1140,9 @@ func (h *Handler) PortalLogin(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, e)
 		return
 	}
+	_ = h.Store.TouchPortalLogin(r.Context(), firmID, portalID)
+	ip, ua := auditContext(r)
+	_ = h.Store.AuditPortal(r.Context(), firmID, portalID, "portal.login", "portal_session", nil, ip, ua)
 	http.SetCookie(w, &http.Cookie{Name: portalCookie, Value: token, Path: "/api/v1/portal", HttpOnly: true, Secure: h.Config.Environment == "production", SameSite: http.SameSiteLaxMode, MaxAge: int(h.Config.SessionTTL.Seconds())})
 	writeJSON(w, 200, map[string]string{"status": "authenticated"})
 }
@@ -1186,39 +1190,119 @@ func (h *Handler) PortalMatter(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, e)
 		return
 	}
-	writeJSON(w, 200, matter)
+	branding, _ := h.Store.Branding(r.Context(), firmID)
+	writeJSON(w, 200, map[string]any{"detail": matter, "branding": branding})
 }
 
-func (h *Handler) CreatePortalUser(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) PortalDownloadDocument(w http.ResponseWriter, r *http.Request) {
+	firmID, portalID, err := h.portalIdentity(r)
+	if err != nil {
+		WriteError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Portal authentication required")
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if !validID(id) {
+		bad(w, r, "Invalid document ID")
+		return
+	}
+	document, key, err := h.Store.PortalDocument(r.Context(), firmID, portalID, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	reader, err := h.Storage.Open(r.Context(), key)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	defer reader.Close()
+	ip, ua := auditContext(r)
+	_ = h.Store.AuditPortal(r.Context(), firmID, portalID, "portal.document_downloaded", "document", &id, ip, ua)
+	w.Header().Set("Content-Type", document.MimeType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeHeaderName(document.OriginalFileName)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = io.Copy(w, reader)
+}
+
+func (h *Handler) AcceptPortalInvitation(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if decode(w, r, &in) != nil || strings.TrimSpace(in.Token) == "" {
+		bad(w, r, "Token and password are required")
+		return
+	}
+	passwordHash, err := auth.HashPassword(in.Password)
+	if err != nil {
+		bad(w, r, err.Error())
+		return
+	}
+	if _, err = h.Store.AcceptPortalInvitation(r.Context(), auth.TokenHash(strings.TrimSpace(in.Token), h.Config.SessionSecret), passwordHash); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "INVALID_INVITATION", "Invitation is invalid, expired or already used")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "accepted"})
+}
+
+func (h *Handler) PortalUsers(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Store.PortalUsers(r.Context(), user(r).FirmID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) CreatePortalInvitation(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		ClientID  string   `json:"clientId"`
 		Email     string   `json:"email"`
-		Password  string   `json:"password"`
 		MatterIDs []string `json:"matterIds"`
 	}
-	if decode(w, r, &in) != nil || !validID(in.ClientID) || !emailPattern.MatchString(in.Email) {
-		bad(w, r, "Valid client, email and password are required")
+	if decode(w, r, &in) != nil || !validID(in.ClientID) || !emailPattern.MatchString(in.Email) || len(in.MatterIDs) == 0 || len(in.MatterIDs) > 100 {
+		bad(w, r, "Valid client, email and at least one Matter are required")
 		return
 	}
-	for _, id := range in.MatterIDs {
-		if !validID(id) {
+	for _, matterID := range in.MatterIDs {
+		if !validID(matterID) {
 			bad(w, r, "Invalid Matter ID")
 			return
 		}
 	}
-	hash, e := auth.HashPassword(in.Password)
-	if e != nil {
-		bad(w, r, e.Error())
+	token, tokenHash, err := auth.NewToken(h.Config.SessionSecret)
+	if err != nil {
+		h.fail(w, r, err)
 		return
 	}
 	u := user(r)
-	id, e := h.Store.CreatePortalUser(r.Context(), u.FirmID, in.ClientID, strings.ToLower(in.Email), hash, in.MatterIDs)
-	if e != nil {
-		h.fail(w, r, e)
+	expiresAt := time.Now().Add(72 * time.Hour)
+	id, err := h.Store.CreatePortalInvitation(r.Context(), u.FirmID, u.ID, in.ClientID, strings.ToLower(in.Email), in.MatterIDs, tokenHash, expiresAt)
+	if err != nil {
+		h.fail(w, r, err)
 		return
 	}
-	h.audit(r, "portal.user_created", "portal_user", &id, map[string]any{"clientId": in.ClientID, "matterCount": len(in.MatterIDs)})
-	writeJSON(w, 201, map[string]string{"id": id})
+	invitationURL := strings.TrimRight(h.Config.WebOrigin, "/") + "/portal/accept?token=" + url.QueryEscape(token)
+	h.audit(r, "portal.invitation_created", "portal_user", &id, map[string]any{"clientId": in.ClientID, "matterCount": len(in.MatterIDs)})
+	writeJSON(w, http.StatusCreated, map[string]string{"id": id, "invitationUrl": invitationURL, "expiresAt": expiresAt.UTC().Format(time.RFC3339)})
+}
+
+func (h *Handler) SetPortalUserActive(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var in struct {
+		Active bool `json:"active"`
+	}
+	if !validID(id) || decode(w, r, &in) != nil {
+		bad(w, r, "Invalid portal user status")
+		return
+	}
+	u := user(r)
+	if err := h.Store.SetPortalUserActive(r.Context(), u.FirmID, id, in.Active); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, map[bool]string{true: "portal.user_reactivated", false: "portal.user_revoked"}[in.Active], "portal_user", &id, map[string]any{})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) audit(r *http.Request, action, resourceType string, resourceID *string, metadata any) {

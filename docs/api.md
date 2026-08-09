@@ -31,6 +31,11 @@ Lists use `page` and `pageSize` (maximum 100) and feature-specific filters such 
 ## Portal
 
 - `POST /api/v1/portal/login`, `/logout`
+- `POST /api/v1/portal/invitations/accept`
 - `GET /api/v1/portal/matters`, `/portal/matters/:id`
+- `GET /api/v1/portal/documents/:id/download`
+- `GET /api/v1/portal/users` (requires `portal.manage`)
+- `POST /api/v1/portal/invitations` (requires `portal.manage`)
+- `PATCH /api/v1/portal/users/:id/active` (requires `portal.manage`)
 
-Portal calls use their own cookie and never accept an internal user session as authorization.
+Portal calls use their own cookie and never accept an internal user session as authorization. Invitation tokens are single use and expire after 72 hours. Client document downloads require both an explicit Matter grant and `clientVisible=true`.

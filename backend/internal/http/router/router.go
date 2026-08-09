@@ -19,9 +19,11 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config) http.H
 	r.Post("/api/v1/setup", h.Setup)
 	r.Post("/api/v1/auth/login", h.Login)
 	r.Post("/api/v1/portal/login", h.PortalLogin)
+	r.Post("/api/v1/portal/invitations/accept", h.AcceptPortalInvitation)
 	r.Post("/api/v1/portal/logout", h.PortalLogout)
 	r.Get("/api/v1/portal/matters", h.PortalMatters)
 	r.Get("/api/v1/portal/matters/{id}", h.PortalMatter)
+	r.Get("/api/v1/portal/documents/{id}/download", h.PortalDownloadDocument)
 	r.Get("/api/v1/public/branding/{slug}", h.PublicBranding)
 	r.Get("/api/v1/public/branding/{slug}/assets/{kind}", h.PublicBrandAsset)
 	r.Group(func(a chi.Router) {
@@ -91,7 +93,9 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config) http.H
 		a.Get("/api/v1/notifications", h.Notifications)
 		a.Patch("/api/v1/notifications/{id}/read", h.ReadNotification)
 		a.With(appmw.Permission("audit.read", handlers.WriteError)).Get("/api/v1/audit", h.AuditEvents)
-		a.With(appmw.Permission("portal.manage", handlers.WriteError)).Post("/api/v1/portal/users", h.CreatePortalUser)
+		a.With(appmw.Permission("portal.manage", handlers.WriteError)).Get("/api/v1/portal/users", h.PortalUsers)
+		a.With(appmw.Permission("portal.manage", handlers.WriteError)).Post("/api/v1/portal/invitations", h.CreatePortalInvitation)
+		a.With(appmw.Permission("portal.manage", handlers.WriteError)).Patch("/api/v1/portal/users/{id}/active", h.SetPortalUserActive)
 		a.Get("/api/v1/dashboard", h.CommandCenter)
 	})
 	return r

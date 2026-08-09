@@ -227,6 +227,16 @@ type Notification struct {
 	ReadAt       *time.Time `json:"readAt,omitempty"`
 	CreatedAt    time.Time  `json:"createdAt"`
 }
+type PortalUser struct {
+	ID          string     `json:"id"`
+	ClientID    string     `json:"clientId"`
+	ClientName  string     `json:"clientName"`
+	Email       string     `json:"email"`
+	Active      bool       `json:"active"`
+	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	MatterCount int        `json:"matterCount"`
+}
 type AuditEvent struct {
 	ID           string          `json:"id"`
 	UserName     *string         `json:"userName,omitempty"`

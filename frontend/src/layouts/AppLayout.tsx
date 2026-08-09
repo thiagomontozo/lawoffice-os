@@ -17,6 +17,7 @@ import {
   WalletCards,
   X,
   Zap,
+  ExternalLink,
 } from "lucide-react";
 import { useAuth } from "../app/AuthContext";
 import { api } from "../services/api";
@@ -122,6 +123,7 @@ export function AppLayout() {
               ["/app/roles", "Papéis", ShieldCheck],
               ["/app/audit", "Auditoria", Gavel],
               ["/app/branding", "Brand Studio", Zap],
+              ["/app/portal", "Portal do Cliente", ExternalLink],
               ["/app/settings", "Configurações", Settings],
             ] as const
           ).map(([to, label, Icon]) => (

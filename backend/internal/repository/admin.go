@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
@@ -445,22 +446,27 @@ func (s *Store) PublishDueNotificationsLocked(ctx context.Context, horizon time.
 	return count, true, nil
 }
 func (s *Store) PortalMatter(ctx context.Context, firmID, portalUserID, matterID string) (domain.MatterDetail, error) {
-	var allowed bool
-	e := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM portal_access WHERE firm_id=$1 AND portal_user_id=$2 AND matter_id=$3)`, firmID, portalUserID, matterID).Scan(&allowed)
-	if e != nil || !allowed {
+	var summaryVisible, timelineVisible bool
+	e := s.Pool.QueryRow(ctx, `SELECT summary_visible,timeline_visible FROM portal_access WHERE firm_id=$1 AND portal_user_id=$2 AND matter_id=$3`, firmID, portalUserID, matterID).Scan(&summaryVisible, &timelineVisible)
+	if errors.Is(e, pgx.ErrNoRows) {
 		return domain.MatterDetail{}, ErrForbidden
+	}
+	if e != nil {
+		return domain.MatterDetail{}, e
 	}
 	m, e := s.Matter(ctx, firmID, matterID)
 	if e != nil {
 		return domain.MatterDetail{}, e
 	}
 	events := []domain.MatterEvent{}
-	rows, e := s.Pool.Query(ctx, `SELECT e.id,e.type,e.summary,e.resource_type,e.resource_id,'Equipe',e.client_visible,e.created_at FROM matter_events e WHERE e.firm_id=$1 AND e.matter_id=$2 AND e.client_visible ORDER BY e.created_at DESC`, firmID, matterID)
+	rows, e := s.Pool.Query(ctx, `SELECT e.id,e.type,e.summary,e.resource_type,e.resource_id,'Equipe',e.client_visible,e.created_at FROM matter_events e WHERE $3 AND e.firm_id=$1 AND e.matter_id=$2 AND e.client_visible ORDER BY e.created_at DESC`, firmID, matterID, timelineVisible)
 	if e == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var x domain.MatterEvent
-			rows.Scan(&x.ID, &x.Type, &x.Summary, &x.ResourceType, &x.ResourceID, &x.ActorName, &x.ClientVisible, &x.CreatedAt)
+			if scanErr := rows.Scan(&x.ID, &x.Type, &x.Summary, &x.ResourceType, &x.ResourceID, &x.ActorName, &x.ClientVisible, &x.CreatedAt); scanErr != nil {
+				return domain.MatterDetail{}, scanErr
+			}
 			events = append(events, x)
 		}
 	}
@@ -476,17 +482,35 @@ func (s *Store) PortalMatter(ctx context.Context, firmID, portalUserID, matterID
 			documents = append(documents, d)
 		}
 	}
-	publicMatter := domain.Matter{ID: m.ID, Type: m.Type, Title: m.Title, Status: m.Status, OpenedAt: m.OpenedAt}
+	publicMatter := domain.Matter{ID: m.ID, Type: m.Type, Title: m.Title, Status: m.Status}
+	if summaryVisible {
+		publicMatter.Description = m.Description
+		publicMatter.OpenedAt = m.OpenedAt
+	}
 	return domain.MatterDetail{Matter: publicMatter, Timeline: events, Documents: documents}, nil
+}
+
+func (s *Store) PortalDocument(ctx context.Context, firmID, portalUserID, documentID string) (domain.Document, string, error) {
+	var document domain.Document
+	var key string
+	err := s.Pool.QueryRow(ctx, `SELECT d.id,d.matter_id,d.title,d.category,v.version_number,v.original_file_name,v.storage_key,v.mime_type,v.size_bytes,v.checksum,d.client_visible,d.created_at FROM documents d JOIN document_versions v ON v.id=d.current_version_id AND v.firm_id=d.firm_id JOIN portal_access pa ON pa.firm_id=d.firm_id AND pa.matter_id=d.matter_id WHERE d.firm_id=$1 AND pa.portal_user_id=$2 AND d.id=$3 AND d.client_visible AND d.deleted_at IS NULL`, firmID, portalUserID, documentID).Scan(&document.ID, &document.MatterID, &document.Title, &document.Category, &document.VersionNumber, &document.OriginalFileName, &key, &document.MimeType, &document.SizeBytes, &document.Checksum, &document.ClientVisible, &document.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return document, "", ErrNotFound
+	}
+	return document, key, err
 }
 
 func (s *Store) PortalCredentials(ctx context.Context, slug, email string) (string, string, string, error) {
 	var firmID, userID, passwordHash string
-	err := s.Pool.QueryRow(ctx, `SELECT p.firm_id,p.id,p.password_hash FROM portal_users p JOIN firms f ON f.id=p.firm_id WHERE f.slug=$1 AND lower(p.email)=lower($2) AND p.active`, slug, email).Scan(&firmID, &userID, &passwordHash)
+	err := s.Pool.QueryRow(ctx, `SELECT p.firm_id,p.id,COALESCE(p.password_hash,'') FROM portal_users p JOIN firms f ON f.id=p.firm_id WHERE f.slug=$1 AND lower(p.email)=lower($2) AND p.active`, slug, email).Scan(&firmID, &userID, &passwordHash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", "", ErrNotFound
 	}
 	return firmID, userID, passwordHash, err
+}
+func (s *Store) TouchPortalLogin(ctx context.Context, firmID, portalUserID string) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE portal_users SET last_login_at=now() WHERE firm_id=$1 AND id=$2`, firmID, portalUserID)
+	return err
 }
 func (s *Store) CreatePortalSession(ctx context.Context, firmID, userID string, tokenHash []byte, expiresAt time.Time) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO portal_sessions(token_hash,firm_id,portal_user_id,expires_at)VALUES($1,$2,$3,$4)`, tokenHash, firmID, userID, expiresAt)
@@ -521,20 +545,103 @@ func (s *Store) PortalMatters(ctx context.Context, firmID, portalUserID string) 
 	return items, rows.Err()
 }
 
-func (s *Store) CreatePortalUser(ctx context.Context, firmID, clientID, email, passwordHash string, matterIDs []string) (string, error) {
+func (s *Store) PortalUsers(ctx context.Context, firmID string) ([]domain.PortalUser, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT p.id,p.client_id,c.name,p.email,p.active,p.last_login_at,p.created_at,count(pa.id) FROM portal_users p JOIN clients c ON c.id=p.client_id AND c.firm_id=p.firm_id LEFT JOIN portal_access pa ON pa.portal_user_id=p.id AND pa.firm_id=p.firm_id WHERE p.firm_id=$1 GROUP BY p.id,c.name ORDER BY p.created_at DESC`, firmID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.PortalUser{}
+	for rows.Next() {
+		var item domain.PortalUser
+		if err = rows.Scan(&item.ID, &item.ClientID, &item.ClientName, &item.Email, &item.Active, &item.LastLoginAt, &item.CreatedAt, &item.MatterCount); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) CreatePortalInvitation(ctx context.Context, firmID, createdBy, clientID, email string, matterIDs []string, tokenHash []byte, expiresAt time.Time) (string, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback(ctx)
-	var id string
-	if err = tx.QueryRow(ctx, `INSERT INTO portal_users(firm_id,client_id,email,password_hash)VALUES($1,$2,lower($3),$4)RETURNING id`, firmID, clientID, email, passwordHash).Scan(&id); err != nil {
+	var portalUserID string
+	err = tx.QueryRow(ctx, `INSERT INTO portal_users(firm_id,client_id,email,password_hash,active)
+		SELECT $1,id,lower($3),NULL,false FROM clients WHERE firm_id=$1 AND id=$2 AND deleted_at IS NULL
+		ON CONFLICT(firm_id,email) DO UPDATE SET client_id=excluded.client_id
+		WHERE portal_users.password_hash IS NULL AND NOT portal_users.active RETURNING id`, firmID, clientID, email).Scan(&portalUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrInvalid
+	}
+	if err != nil {
 		return "", mapError(err)
 	}
+	if _, err = tx.Exec(ctx, `DELETE FROM portal_invitations WHERE firm_id=$1 AND portal_user_id=$2 AND accepted_at IS NULL`, firmID, portalUserID); err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM portal_access WHERE firm_id=$1 AND portal_user_id=$2`, firmID, portalUserID); err != nil {
+		return "", err
+	}
 	for _, matterID := range matterIDs {
-		if _, err = tx.Exec(ctx, `INSERT INTO portal_access(firm_id,portal_user_id,matter_id,summary_visible,timeline_visible,appointments_visible)VALUES($1,$2,$3,true,true,true)`, firmID, id, matterID); err != nil {
-			return "", mapError(err)
+		result, accessErr := tx.Exec(ctx, `INSERT INTO portal_access(firm_id,portal_user_id,matter_id,summary_visible,timeline_visible,appointments_visible) SELECT $1,$2,id,true,true,true FROM matters WHERE firm_id=$1 AND id=$3 AND deleted_at IS NULL`, firmID, portalUserID, matterID)
+		if accessErr != nil {
+			return "", mapError(accessErr)
+		}
+		if result.RowsAffected() == 0 {
+			return "", ErrInvalid
 		}
 	}
-	return id, tx.Commit(ctx)
+	if _, err = tx.Exec(ctx, `INSERT INTO portal_invitations(token_hash,firm_id,portal_user_id,expires_at,created_by)VALUES($1,$2,$3,$4,$5)`, tokenHash, firmID, portalUserID, expiresAt, createdBy); err != nil {
+		return "", mapError(err)
+	}
+	return portalUserID, tx.Commit(ctx)
+}
+
+func (s *Store) AcceptPortalInvitation(ctx context.Context, tokenHash []byte, passwordHash string) (string, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	var portalUserID string
+	err = tx.QueryRow(ctx, `UPDATE portal_invitations SET accepted_at=now() WHERE token_hash=$1 AND accepted_at IS NULL AND expires_at>now() RETURNING portal_user_id`, tokenHash).Scan(&portalUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE portal_users SET password_hash=$2,active=true WHERE id=$1`, portalUserID, passwordHash); err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM portal_invitations WHERE portal_user_id=$1 AND accepted_at IS NULL`, portalUserID); err != nil {
+		return "", err
+	}
+	return portalUserID, tx.Commit(ctx)
+}
+
+func (s *Store) SetPortalUserActive(ctx context.Context, firmID, portalUserID string, active bool) error {
+	result, err := s.Pool.Exec(ctx, `UPDATE portal_users SET active=$3 WHERE firm_id=$1 AND id=$2 AND (NOT $3 OR password_hash IS NOT NULL)`, firmID, portalUserID, active)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	if !active {
+		_, err = s.Pool.Exec(ctx, `DELETE FROM portal_sessions WHERE firm_id=$1 AND portal_user_id=$2`, firmID, portalUserID)
+	}
+	return err
+}
+
+func (s *Store) AuditPortal(ctx context.Context, firmID, portalUserID, action, resourceType string, resourceID *string, ip, userAgent string) error {
+	metadata, err := json.Marshal(map[string]string{"portalUserId": portalUserID})
+	if err != nil {
+		return err
+	}
+	_, err = s.Pool.Exec(ctx, `INSERT INTO audit_events(firm_id,user_id,action,resource_type,resource_id,metadata,ip_address,user_agent)VALUES($1,NULL,$2,$3,$4,$5,NULLIF($6,'')::inet,$7)`, firmID, action, resourceType, resourceID, metadata, ip, userAgent)
+	return err
 }

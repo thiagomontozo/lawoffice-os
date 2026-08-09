@@ -51,7 +51,7 @@ func createFirm(t *testing.T, store *Store, ctx context.Context, label string) (
 }
 func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	store, ctx := integrationStore(t)
-	ownerA, _ := createFirm(t, store, ctx, "Alpha")
+	ownerA, slugA := createFirm(t, store, ctx, "Alpha")
 	ownerB, _ := createFirm(t, store, ctx, "Beta")
 	clientA, err := store.CreateClient(ctx, ownerA.FirmID, domain.Client{Type: "person", Name: "Client Alpha"})
 	if err != nil {
@@ -130,6 +130,45 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	}
 	if err = store.RestoreDocument(ctx, ownerA.FirmID, doc.ID); err != nil {
 		t.Fatalf("restore failed: %v", err)
+	}
+	portalToken, portalTokenHash, err := auth.NewToken("portal-test-secret")
+	if err != nil || portalToken == "" {
+		t.Fatalf("create portal token: %v", err)
+	}
+	portalID, err := store.CreatePortalInvitation(ctx, ownerA.FirmID, ownerA.ID, clientA.ID, "portal@example.test", []string{matter.ID}, portalTokenHash, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("create portal invitation: %v", err)
+	}
+	portalPassword, err := auth.HashPassword("portal-password-strong")
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptedID, err := store.AcceptPortalInvitation(ctx, portalTokenHash, portalPassword)
+	if err != nil || acceptedID != portalID {
+		t.Fatalf("accept portal invitation: id=%s err=%v", acceptedID, err)
+	}
+	if _, err = store.AcceptPortalInvitation(ctx, portalTokenHash, portalPassword); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("portal invitation should be single use, got %v", err)
+	}
+	firmID, authenticatedPortalID, storedHash, err := store.PortalCredentials(ctx, slugA, "portal@example.test")
+	if err != nil || firmID != ownerA.FirmID || authenticatedPortalID != portalID || !auth.CheckPassword(storedHash, "portal-password-strong") {
+		t.Fatalf("portal credentials unavailable: firm=%s portal=%s err=%v", firmID, authenticatedPortalID, err)
+	}
+	if _, _, err = store.PortalDocument(ctx, ownerA.FirmID, portalID, doc.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("private document leaked to portal, got %v", err)
+	}
+	publicDoc, err := store.CreateDocument(ctx, ownerA.FirmID, ownerA.ID, domain.Document{MatterID: &matter.ID, Title: "Shared evidence", Category: "evidence", OriginalFileName: "shared.pdf", MimeType: "application/pdf", SizeBytes: 3, Checksum: "def", ClientVisible: true}, uuid.NewString()+".pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = store.PortalDocument(ctx, ownerA.FirmID, portalID, publicDoc.ID); err != nil {
+		t.Fatalf("shared document unavailable to portal: %v", err)
+	}
+	if err = store.SetPortalUserActive(ctx, ownerA.FirmID, portalID, false); err != nil {
+		t.Fatalf("revoke portal user: %v", err)
+	}
+	if _, _, _, err = store.PortalCredentials(ctx, slugA, "portal@example.test"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("revoked portal user should not authenticate, got %v", err)
 	}
 	task, err := store.CreateTask(ctx, ownerA.FirmID, ownerA.ID, domain.Task{MatterID: &matter.ID, Title: "Review restricted advice", Status: "todo", Priority: "normal"})
 	if err != nil {
