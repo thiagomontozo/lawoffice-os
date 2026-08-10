@@ -53,6 +53,34 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	store, ctx := integrationStore(t)
 	ownerA, slugA := createFirm(t, store, ctx, "Alpha")
 	ownerB, _ := createFirm(t, store, ctx, "Beta")
+	preferences, err := store.NotificationPreferences(ctx, ownerA.FirmID, ownerA.ID)
+	if err != nil || preferences.EmailDeadlines || preferences.EmailTasks {
+		t.Fatalf("unexpected default notification preferences: preferences=%+v err=%v", preferences, err)
+	}
+	preferences, err = store.UpdateNotificationPreferences(ctx, ownerA.FirmID, ownerA.ID, domain.NotificationPreferences{EmailDeadlines: true, EmailTasks: true})
+	if err != nil || !preferences.EmailDeadlines || !preferences.EmailTasks {
+		t.Fatalf("update notification preferences: preferences=%+v err=%v", preferences, err)
+	}
+	var notificationID string
+	if err = store.Pool.QueryRow(ctx, `INSERT INTO notifications(firm_id,user_id,type,title,message,resource_type) VALUES($1,$2,'deadline.approaching','Deadline notice','Deadline approaching','deadline') RETURNING id`, ownerA.FirmID, ownerA.ID).Scan(&notificationID); err != nil {
+		t.Fatal(err)
+	}
+	pendingEmails, err := store.PendingEmailNotifications(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundPending := false
+	for _, pending := range pendingEmails {
+		if pending.ID == notificationID {
+			foundPending = pending.FirmID == ownerA.FirmID && pending.Email == ownerA.Email
+		}
+	}
+	if !foundPending {
+		t.Fatal("opted-in notification was not returned for email delivery")
+	}
+	if err = store.MarkNotificationEmailQueued(ctx, ownerA.FirmID, notificationID); err != nil {
+		t.Fatal(err)
+	}
 	clientA, err := store.CreateClient(ctx, ownerA.FirmID, domain.Client{Type: "person", Name: "Client Alpha"})
 	if err != nil {
 		t.Fatal(err)

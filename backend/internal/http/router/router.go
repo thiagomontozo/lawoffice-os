@@ -99,6 +99,8 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config, metric
 		a.With(appmw.Permission("matter.read", handlers.WriteError)).Get("/api/v1/search", h.Search)
 		a.Get("/api/v1/notifications", h.Notifications)
 		a.Patch("/api/v1/notifications/{id}/read", h.ReadNotification)
+		a.Get("/api/v1/notifications/preferences", h.NotificationPreferences)
+		a.Put("/api/v1/notifications/preferences", h.UpdateNotificationPreferences)
 		a.With(appmw.Permission("audit.read", handlers.WriteError)).Get("/api/v1/audit", h.AuditEvents)
 		a.With(appmw.Permission("portal.manage", handlers.WriteError)).Get("/api/v1/portal/users", h.PortalUsers)
 		a.With(appmw.Permission("portal.manage", handlers.WriteError)).Post("/api/v1/portal/invitations", h.CreatePortalInvitation)

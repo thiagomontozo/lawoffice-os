@@ -1058,6 +1058,30 @@ func (h *Handler) ReadNotification(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(204)
 }
+func (h *Handler) NotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	u := user(r)
+	preferences, err := h.Store.NotificationPreferences(r.Context(), u.FirmID, u.ID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "notification.preferences_updated", "user", &u.ID, map[string]any{"emailDeadlines": preferences.EmailDeadlines, "emailTasks": preferences.EmailTasks})
+	writeJSON(w, http.StatusOK, preferences)
+}
+func (h *Handler) UpdateNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	var preferences domain.NotificationPreferences
+	if decode(w, r, &preferences) != nil {
+		bad(w, r, "Invalid notification preferences")
+		return
+	}
+	u := user(r)
+	preferences, err := h.Store.UpdateNotificationPreferences(r.Context(), u.FirmID, u.ID, preferences)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, preferences)
+}
 func (h *Handler) AuditEvents(w http.ResponseWriter, r *http.Request) {
 	x, e := h.Store.AuditEvents(r.Context(), user(r).FirmID)
 	if e != nil {

@@ -85,7 +85,7 @@ func main() {
 	background.Add(2)
 	go func() {
 		defer background.Done()
-		scheduler.New(store, logger).Run(ctx)
+		scheduler.New(store, jobQueue, logger).Run(ctx)
 	}()
 	go func() {
 		defer background.Done()

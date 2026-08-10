@@ -299,7 +299,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 - SSE replay is durable for seven days and capped at 500 events per reconnect; clients that remain offline beyond that window must perform a full data refresh.
 - Local object storage still assumes a single shared filesystem. S3/MinIO and ClamAV adapters are available, but document previews and asynchronous quarantine review are not.
 - Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
-- SMTP supports invitation and password-reset delivery, but broader event e-mail preferences, bounce handling and per-field portal sharing controls are not yet available.
+- SMTP supports invitations, password recovery and opt-in deadline/task alerts through the durable queue. Bounce handling, digest scheduling and per-field portal sharing controls are not yet available.
 - The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter. Metrics now provide a monitoring foundation, but alert delivery and dashboards remain deployment responsibilities.
 - Scheduler notification rules are basic and do not calculate legal procedural deadlines.
 - No e-mail/SMS, calendar provider, court connector, OCR, AI, SSO or SaaS billing.
@@ -309,7 +309,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 ### v0.2
 
 - broader handler, browser and accessibility test coverage
-- e-mail notifications
+- richer notification preferences, digests and bounce handling
 - richer custom fields
 - PDF report generation
 - improved global search

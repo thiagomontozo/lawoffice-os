@@ -30,6 +30,8 @@ GROUP BY status;
 
 Investigate recurring `failed` rows using structured worker logs and job IDs. Do not expose or manually decrypt queue payloads during routine support.
 
+Users opt into deadline and overdue-task e-mails under **Settings**. In-app notifications remain the source of truth. The scheduler uses a stable `notification:<uuid>` key before accepting a job and records `email_queued_at` afterward, preventing duplicate queue entries during normal multi-instance operation.
+
 Thresholds must be tuned from real traffic. The values above are cautious starting points, not product guarantees.
 
 ## Backup

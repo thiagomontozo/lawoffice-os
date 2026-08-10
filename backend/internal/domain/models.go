@@ -227,6 +227,19 @@ type Notification struct {
 	ReadAt       *time.Time `json:"readAt,omitempty"`
 	CreatedAt    time.Time  `json:"createdAt"`
 }
+type NotificationPreferences struct {
+	EmailDeadlines bool `json:"emailDeadlines"`
+	EmailTasks     bool `json:"emailTasks"`
+}
+type PendingEmailNotification struct {
+	ID      string
+	FirmID  string
+	Email   string
+	Name    string
+	Type    string
+	Title   string
+	Message string
+}
 type PortalUser struct {
 	ID          string     `json:"id"`
 	ClientID    string     `json:"clientId"`
