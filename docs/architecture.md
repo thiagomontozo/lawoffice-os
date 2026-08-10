@@ -26,6 +26,8 @@ The scheduler is one cancellation-aware goroutine for the entire process, not on
 
 Outbound e-mail uses a separate PostgreSQL-backed worker. Atomic `SKIP LOCKED` claims allow multiple replicas, abandoned leases are reclaimed, and bounded retry ends in a terminal state. Stable deduplication keys coordinate opt-in deadline/task alerts across instances. Sensitive payloads are encrypted before insertion and removed when processing ends.
 
+Document OCR/text extraction is another cancellation-aware worker, but uses dedicated relational jobs because its page output is durable domain data rather than an outbound message. A trigger creates one extraction per immutable version. Workers open opaque object keys only after a database claim, validate provider output and commit all pages atomically. The HTTP API repeats document and Matter authorization before exposing any extracted text.
+
 ## Frontend
 
 React Router separates public login/setup, protected `/app` routes and `/portal`. An authentication context loads the user, firm and branding. CSS variables apply the firm palette. The app layout owns desktop navigation, mobile navigation, global search, quick create and the Ctrl/Cmd+K command palette. Feature pages handle loading, empty, error and populated states.

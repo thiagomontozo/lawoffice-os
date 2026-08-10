@@ -768,6 +768,35 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"items": x})
 }
+func (h *Handler) DocumentExtraction(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	pageSize, offset := number(r, "pageSize", 50), number(r, "offset", 0)
+	if !validID(id) || pageSize < 1 || pageSize > 100 || offset < 0 || offset > 1000000 {
+		bad(w, r, "Invalid document ID")
+		return
+	}
+	u := user(r)
+	extraction, err := h.Service.DocumentExtraction(r.Context(), u.FirmID, u.ID, id, pageSize, offset)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, extraction)
+}
+func (h *Handler) ReprocessDocument(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validID(id) {
+		bad(w, r, "Invalid document ID")
+		return
+	}
+	u := user(r)
+	if err := h.Service.ReprocessDocument(r.Context(), u.FirmID, u.ID, id); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.audit(r, "document.extraction_requeued", "document", &id, nil)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "pending"})
+}
 func (h *Handler) AddVersion(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if !validID(id) {

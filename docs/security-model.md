@@ -21,6 +21,8 @@ Signature updates, content-disarm, storage-side encryption and retention automat
 
 The built-in rate limiter is defense in depth for a single API instance. A production deployment should also enforce distributed rate limits and abuse controls at a trusted reverse proxy or gateway.
 
+OCR output is untrusted derived data. The worker uses opaque storage keys, bounds input and output, validates page numbers/confidence, sanitizes error states and never logs document text. Remote OCR is optional, requires HTTPS and a bearer token in production, and must undergo a deployment-specific privacy and retention review.
+
 ## Audit, deletion and logging
 
 Audit metadata excludes passwords, cookies, authorization values and content. Legal records use soft deletion where appropriate; document objects are retained until an explicit retention process. Structured logs include request IDs but avoid client documents and arbitrary field values.

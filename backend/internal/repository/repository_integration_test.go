@@ -141,6 +141,13 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	extraction, err := store.DocumentExtraction(ctx, ownerA.FirmID, doc.ID, 10, 0)
+	if err != nil || extraction.Status != "pending" {
+		t.Fatalf("document extraction was not queued: extraction=%+v err=%v", extraction, err)
+	}
+	if _, err = store.DocumentExtraction(ctx, ownerB.FirmID, doc.ID, 10, 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-firm extraction lookup should fail, got %v", err)
+	}
 	if _, _, err = store.DocumentVersion(ctx, ownerB.FirmID, ownerB.ID, doc.ID, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-firm document should be hidden, got %v", err)
 	}

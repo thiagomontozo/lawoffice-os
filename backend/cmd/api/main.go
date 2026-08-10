@@ -18,6 +18,7 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/jobs"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/mailer"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/observability"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/ocr"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/scanner"
@@ -61,6 +62,14 @@ func main() {
 	}
 	store := repository.New(db)
 	services := service.New(store, objects, uploadScanner, cfg.MaxUpload)
+	var extractionWorker *ocr.Worker
+	if cfg.OCRMode != "off" {
+		var provider ocr.Provider = ocr.Builtin{MaxBytes: cfg.OCRMaxInput}
+		if cfg.OCRMode == "http" {
+			provider = &ocr.HTTPProvider{Endpoint: cfg.OCREndpoint, Token: cfg.OCRToken, Language: cfg.OCRLanguage, Client: &http.Client{Timeout: cfg.OCRTimeout}, MaxBytes: cfg.OCRMaxInput, MaxPages: cfg.OCRMaxPages, MaxCharacters: cfg.OCRMaxCharacters}
+		}
+		extractionWorker = ocr.NewWorker(store, objects, provider, logger)
+	}
 	var emailSender mailer.Sender
 	if cfg.SMTPMode == "enabled" {
 		emailSender, err = mailer.NewSMTP(mailer.SMTPConfig{Address: cfg.SMTPAddress, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, FromName: cfg.SMTPFromName, RequireTLS: cfg.SMTPRequireTLS})
@@ -83,6 +92,13 @@ func main() {
 	server := &http.Server{Addr: ":" + cfg.Port, Handler: router.New(handler, store, cfg, metrics), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
 	var background sync.WaitGroup
 	background.Add(2)
+	if extractionWorker != nil {
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			extractionWorker.Run(ctx)
+		}()
+	}
 	go func() {
 		defer background.Done()
 		scheduler.New(store, jobQueue, logger).Run(ctx)

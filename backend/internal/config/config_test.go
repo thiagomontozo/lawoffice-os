@@ -85,3 +85,18 @@ func TestProductionSMTPRequiresTLSAndStrongJobSecret(t *testing.T) {
 		t.Fatal("production SMTP with weak job encryption secret should be rejected")
 	}
 }
+func TestProductionRemoteOCRRequiresHTTPSAndToken(t *testing.T) {
+	validEnvironment(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("SESSION_SECRET", "a-production-session-secret-with-entropy")
+	t.Setenv("OCR_MODE", "http")
+	t.Setenv("OCR_ENDPOINT", "http://ocr.example.test/v1/extract")
+	if _, err := Load(); err == nil {
+		t.Fatal("production OCR over HTTP should be rejected")
+	}
+	t.Setenv("OCR_ENDPOINT", "https://ocr.example.test/v1/extract")
+	t.Setenv("OCR_TOKEN", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("production OCR with weak token should be rejected")
+	}
+}

@@ -35,3 +35,7 @@ Deleting a document is a reversible metadata operation. The active library hides
 Physical object deletion is intentionally separate. A future retention worker must consider legal hold, firm policy and auditable approval before purging any version. This prevents a routine UI action from silently destroying legal evidence.
 
 Folders provide simple Matter organization without pretending to be a general filesystem. The local adapter remains intended for single-instance or shared-volume deployments; S3/MinIO is the shared-object option.
+
+## OCR and extracted text
+
+Each version has an independent asynchronous extraction. Text and confidence are persisted per page; failures never replace or damage the original object. Built-in extraction covers textual office formats and an HTTPS adapter supports specialist PDF/image OCR services. Authorization is evaluated again when extracted text is read or reprocessing is requested. See [OCR](ocr.md) for the provider contract and limits.
