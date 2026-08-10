@@ -30,6 +30,15 @@ func TestProductionRejectsPlaceholderSecret(t *testing.T) {
 		t.Fatal("production placeholder secret should be rejected")
 	}
 }
+func TestProductionRejectsWeakMetricsTokenWhenEnabled(t *testing.T) {
+	validEnvironment(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("SESSION_SECRET", "a-production-session-secret-with-entropy")
+	t.Setenv("METRICS_TOKEN", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("production weak metrics token should be rejected")
+	}
+}
 func TestOriginMustBeExact(t *testing.T) {
 	validEnvironment(t)
 	t.Setenv("WEB_ORIGIN", "http://localhost:5173/path")

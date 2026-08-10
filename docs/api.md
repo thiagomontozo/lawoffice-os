@@ -5,6 +5,7 @@ All errors use `{ "error": { "code", "message", "requestId" } }`. Internal endpo
 ## Public and authentication
 
 - `GET /healthz`, `GET /readyz`
+- `GET /metrics` when `METRICS_TOKEN` is configured; requires `Authorization: Bearer <token>` and exposes deployment-level Prometheus data
 - `POST /api/v1/setup`
 - `POST /api/v1/auth/login`, `POST /logout`, `GET /me`, `POST /change-password`
 - `GET /api/v1/public/branding/:slug`
