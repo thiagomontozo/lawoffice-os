@@ -41,13 +41,13 @@ func (s *Service) RequirePermission(ctx context.Context, firmID, userID, key str
 	return nil
 }
 func (s *Service) MatterDetail(ctx context.Context, firmID, userID, id string) (domain.MatterDetail, error) {
-	ok, e := s.Store.CanAccessMatter(ctx, firmID, userID, id, "read")
-	if e != nil || !ok {
-		return domain.MatterDetail{}, repository.ErrForbidden
-	}
 	m, e := s.Store.Matter(ctx, firmID, id)
 	if e != nil {
 		return domain.MatterDetail{}, e
+	}
+	ok, e := s.Store.CanAccessMatter(ctx, firmID, userID, id, "read")
+	if e != nil || !ok {
+		return domain.MatterDetail{}, repository.ErrForbidden
 	}
 	timeline, e := s.Store.Timeline(ctx, firmID, id, userID)
 	if e != nil {
