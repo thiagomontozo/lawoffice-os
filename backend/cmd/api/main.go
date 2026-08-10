@@ -14,6 +14,7 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/database"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/handlers"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/router"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/observability"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/scheduler"
@@ -52,7 +53,8 @@ func main() {
 		logger.Warn("database realtime unavailable; using local delivery", "error", err)
 	}
 	handler := handlers.New(store, services, objects, db, cfg, logger, hub)
-	server := &http.Server{Addr: ":" + cfg.Port, Handler: router.New(handler, store, cfg), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
+	metrics := observability.NewMetrics()
+	server := &http.Server{Addr: ":" + cfg.Port, Handler: router.New(handler, store, cfg, metrics), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
 	go scheduler.New(store, logger).Run(ctx)
 	done := make(chan error, 1)
 	go func() {

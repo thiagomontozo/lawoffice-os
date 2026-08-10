@@ -9,14 +9,18 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/config"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/handlers"
 	appmw "github.com/thiagomontozo/lawoffice-os/backend/internal/http/middleware"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/observability"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
 )
 
-func New(h *handlers.Handler, store *repository.Store, cfg config.Config) http.Handler {
+func New(h *handlers.Handler, store *repository.Store, cfg config.Config, metrics *observability.Metrics) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP, appmw.RequestID, appmw.Recover(h.Logger, handlers.WriteError), appmw.Logging(h.Logger), appmw.CORS(cfg.WebOrigin, handlers.WriteError))
+	r.Use(middleware.RealIP, appmw.RequestID, metrics.Middleware, appmw.Recover(h.Logger, handlers.WriteError), appmw.Logging(h.Logger), appmw.CORS(cfg.WebOrigin, handlers.WriteError))
 	r.Get("/healthz", h.Health)
 	r.Get("/readyz", h.Ready)
+	if cfg.MetricsToken != "" {
+		r.With(appmw.BearerToken(cfg.MetricsToken, handlers.WriteError)).Get("/metrics", metrics.ServeHTTP)
+	}
 	r.With(appmw.RateLimit(5, time.Hour, handlers.WriteError)).Post("/api/v1/setup", h.Setup)
 	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/auth/login", h.Login)
 	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/portal/login", h.PortalLogin)

@@ -19,6 +19,7 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/config"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/database"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/handlers"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/observability"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/service"
@@ -69,7 +70,7 @@ func newIntegrationApp(t *testing.T) *integrationApp {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler := handlers.New(store, service.New(store, objects, cfg.MaxUpload), objects, pool, cfg, logger, hub)
-	return &integrationApp{handler: New(handler, store, cfg), pool: pool, hub: hub}
+	return &integrationApp{handler: New(handler, store, cfg, observability.NewMetrics()), pool: pool, hub: hub}
 }
 
 func (a *integrationApp) request(t *testing.T, method, path string, body any, cookies ...*http.Cookie) *httptest.ResponseRecorder {

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"github.com/google/uuid"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/auth"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
@@ -172,6 +173,18 @@ func Permission(key string, write ErrorWriter) func(http.Handler) http.Handler {
 			u, ok := User(r.Context())
 			if !ok || !contains(u.Permissions, key) {
 				write(w, r, 403, "FORBIDDEN", "Permission required: "+key)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+func BearerToken(expected string, write ErrorWriter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if expected == "" || len(provided) != len(expected) || subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+				write(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Valid bearer token required")
 				return
 			}
 			next.ServeHTTP(w, r)

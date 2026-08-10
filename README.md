@@ -215,6 +215,7 @@ No real legal data should be used until deployment security, backups and validat
 | `DATABASE_URL` | PostgreSQL connection | see `.env.example` |
 | `WEB_ORIGIN` | exact allowed browser origin | `http://localhost:5173` |
 | `SESSION_SECRET` | session HMAC key | required |
+| `METRICS_TOKEN` | optional bearer token enabling `/metrics` | disabled |
 | `STORAGE_PATH` | local object root | `./data/storage` |
 | `MAX_UPLOAD_MB` | upload limit, 1–100 | `25` |
 | `LOG_LEVEL` | structured log level | `info` |
@@ -236,6 +237,10 @@ The initial migration creates the multi-firm relational model, constraints, inde
 ## Docker
 
 The repository includes multi-stage backend/frontend Dockerfiles and a Compose topology for PostgreSQL, API, web and persistent document storage. CI builds both images. A local Compose validation requires Docker Desktop or another compatible daemon.
+
+## Operations and Recovery
+
+The API exposes liveness, dependency-aware readiness and an optional bearer-protected Prometheus endpoint. Versioned PowerShell scripts back up and restore PostgreSQL together with local document storage, including a manifest and SHA-256 integrity checks. See the [operations runbook](docs/operations.md) before defining recovery objectives or handling a production incident.
 
 ## Testing and CI
 
@@ -272,6 +277,7 @@ Repository integration tests use `TEST_DATABASE_URL`. Without it they skip safel
 backend/             Go modular monolith, migration runner and SQL migrations
 frontend/            React/TypeScript workspace and white-label portal
 docs/                Architecture, domain, security and decisions
+scripts/             Backup and restore operations
 Dockerfile.backend   Multi-stage API image
 Dockerfile.frontend  Multi-stage static web image
 compose.yml          PostgreSQL + API + web + persistent storage
@@ -288,7 +294,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 - Local object storage assumes a single shared filesystem and has no virus scanner or preview service.
 - Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
 - Portal invitations must be delivered by the firm; password recovery and per-field sharing controls are not yet available.
-- The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter and monitoring.
+- The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter. Metrics now provide a monitoring foundation, but alert delivery and dashboards remain deployment responsibilities.
 - Scheduler notification rules are basic and do not calculate legal procedural deadlines.
 - No e-mail/SMS, calendar provider, court connector, OCR, AI, SSO or SaaS billing.
 

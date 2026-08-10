@@ -12,14 +12,14 @@ import (
 )
 
 type Config struct {
-	Environment, Port, DatabaseURL, WebOrigin, SessionSecret, StoragePath, MigrationsDir, Locale, Timezone string
-	MaxUpload                                                                                              int64
-	LogLevel                                                                                               slog.Level
-	SessionTTL                                                                                             time.Duration
+	Environment, Port, DatabaseURL, WebOrigin, SessionSecret, MetricsToken, StoragePath, MigrationsDir, Locale, Timezone string
+	MaxUpload                                                                                                            int64
+	LogLevel                                                                                                             slog.Level
+	SessionTTL                                                                                                           time.Duration
 }
 
 func Load() (Config, error) {
-	c := Config{Environment: value("APP_ENV", "development"), Port: value("API_PORT", "8080"), DatabaseURL: strings.TrimSpace(os.Getenv("DATABASE_URL")), WebOrigin: value("WEB_ORIGIN", "http://localhost:5173"), SessionSecret: strings.TrimSpace(os.Getenv("SESSION_SECRET")), StoragePath: value("STORAGE_PATH", "./data/storage"), MigrationsDir: value("MIGRATIONS_DIR", "./migrations"), Locale: value("DEFAULT_LOCALE", "pt-BR"), Timezone: value("DEFAULT_TIMEZONE", "America/Sao_Paulo"), SessionTTL: 30 * 24 * time.Hour}
+	c := Config{Environment: value("APP_ENV", "development"), Port: value("API_PORT", "8080"), DatabaseURL: strings.TrimSpace(os.Getenv("DATABASE_URL")), WebOrigin: value("WEB_ORIGIN", "http://localhost:5173"), SessionSecret: strings.TrimSpace(os.Getenv("SESSION_SECRET")), MetricsToken: strings.TrimSpace(os.Getenv("METRICS_TOKEN")), StoragePath: value("STORAGE_PATH", "./data/storage"), MigrationsDir: value("MIGRATIONS_DIR", "./migrations"), Locale: value("DEFAULT_LOCALE", "pt-BR"), Timezone: value("DEFAULT_TIMEZONE", "America/Sao_Paulo"), SessionTTL: 30 * 24 * time.Hour}
 	if c.DatabaseURL == "" || c.SessionSecret == "" {
 		return c, errors.New("DATABASE_URL and SESSION_SECRET are required")
 	}
@@ -36,6 +36,9 @@ func Load() (Config, error) {
 	}
 	if c.Environment == "production" && (c.SessionSecret == "change-me" || len(c.SessionSecret) < 32) {
 		return c, errors.New("SESSION_SECRET must contain at least 32 characters in production")
+	}
+	if c.Environment == "production" && c.MetricsToken != "" && (c.MetricsToken == "change-me" || len(c.MetricsToken) < 32) {
+		return c, errors.New("METRICS_TOKEN must contain at least 32 characters in production when metrics are enabled")
 	}
 	mb, e := strconv.ParseInt(value("MAX_UPLOAD_MB", "25"), 10, 64)
 	if e != nil || mb < 1 || mb > 100 {

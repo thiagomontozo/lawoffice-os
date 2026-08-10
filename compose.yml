@@ -16,6 +16,7 @@ services:
       DATABASE_URL: postgres://lawoffice:${POSTGRES_PASSWORD:-lawoffice}@postgres:5432/lawoffice?sslmode=disable
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:-change-me-development-only}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       STORAGE_PATH: /data/storage
       MIGRATIONS_DIR: /app/migrations
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
