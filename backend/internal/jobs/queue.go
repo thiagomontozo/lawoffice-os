@@ -49,6 +49,17 @@ func New(pool *pgxpool.Pool, secret string, sender mailer.Sender, logger *slog.L
 func (q *Queue) Enabled() bool { return q.sender != nil }
 
 func (q *Queue) EnqueueEmail(ctx context.Context, firmID string, message mailer.Message) (bool, error) {
+	return q.enqueueEmail(ctx, firmID, "", message)
+}
+
+func (q *Queue) EnsureEmail(ctx context.Context, firmID, deduplicationKey string, message mailer.Message) (bool, error) {
+	if deduplicationKey == "" || len(deduplicationKey) > 200 {
+		return false, errors.New("invalid outbound job deduplication key")
+	}
+	return q.enqueueEmail(ctx, firmID, deduplicationKey, message)
+}
+
+func (q *Queue) enqueueEmail(ctx context.Context, firmID, deduplicationKey string, message mailer.Message) (bool, error) {
 	if q.sender == nil {
 		return false, nil
 	}
@@ -60,7 +71,11 @@ func (q *Queue) EnqueueEmail(ctx context.Context, firmID string, message mailer.
 	if err != nil {
 		return false, err
 	}
-	_, err = q.pool.Exec(ctx, `INSERT INTO outbound_jobs(firm_id,job_type,encrypted_payload) VALUES($1,'email.send',$2)`, firmID, encrypted)
+	if deduplicationKey == "" {
+		_, err = q.pool.Exec(ctx, `INSERT INTO outbound_jobs(firm_id,job_type,encrypted_payload) VALUES($1,'email.send',$2)`, firmID, encrypted)
+	} else {
+		_, err = q.pool.Exec(ctx, `INSERT INTO outbound_jobs(firm_id,job_type,encrypted_payload,deduplication_key) VALUES($1,'email.send',$2,$3) ON CONFLICT (deduplication_key) WHERE deduplication_key IS NOT NULL DO NOTHING`, firmID, encrypted, deduplicationKey)
+	}
 	return err == nil, err
 }
 

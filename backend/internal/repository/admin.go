@@ -376,6 +376,57 @@ func (s *Store) ReadNotification(ctx context.Context, firmID, userID, id string)
 	}
 	return nil
 }
+
+func (s *Store) NotificationPreferences(ctx context.Context, firmID, userID string) (domain.NotificationPreferences, error) {
+	var preferences domain.NotificationPreferences
+	err := s.Pool.QueryRow(ctx, `SELECT email_deadlines,email_tasks FROM user_notification_preferences WHERE firm_id=$1 AND user_id=$2`, firmID, userID).Scan(&preferences.EmailDeadlines, &preferences.EmailTasks)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return preferences, nil
+	}
+	return preferences, err
+}
+
+func (s *Store) UpdateNotificationPreferences(ctx context.Context, firmID, userID string, preferences domain.NotificationPreferences) (domain.NotificationPreferences, error) {
+	err := s.Pool.QueryRow(ctx, `INSERT INTO user_notification_preferences(firm_id,user_id,email_deadlines,email_tasks) VALUES($1,$2,$3,$4) ON CONFLICT(firm_id,user_id) DO UPDATE SET email_deadlines=EXCLUDED.email_deadlines,email_tasks=EXCLUDED.email_tasks,updated_at=now() RETURNING email_deadlines,email_tasks`, firmID, userID, preferences.EmailDeadlines, preferences.EmailTasks).Scan(&preferences.EmailDeadlines, &preferences.EmailTasks)
+	return preferences, err
+}
+
+func (s *Store) PendingEmailNotifications(ctx context.Context, limit int) ([]domain.PendingEmailNotification, error) {
+	if limit < 1 || limit > 500 {
+		return nil, ErrInvalid
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT n.id,n.firm_id,u.email,u.name,n.type,n.title,n.message
+        FROM notifications n
+        JOIN users u ON u.id=n.user_id AND u.firm_id=n.firm_id
+        JOIN user_notification_preferences p ON p.user_id=n.user_id AND p.firm_id=n.firm_id
+        WHERE n.email_queued_at IS NULL AND u.active AND u.deleted_at IS NULL
+          AND ((n.type='deadline.approaching' AND p.email_deadlines) OR (n.type='task.overdue' AND p.email_tasks))
+        ORDER BY n.created_at,n.id LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.PendingEmailNotification{}
+	for rows.Next() {
+		var item domain.PendingEmailNotification
+		if err = rows.Scan(&item.ID, &item.FirmID, &item.Email, &item.Name, &item.Type, &item.Title, &item.Message); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) MarkNotificationEmailQueued(ctx context.Context, firmID, notificationID string) error {
+	result, err := s.Pool.Exec(ctx, `UPDATE notifications SET email_queued_at=COALESCE(email_queued_at,now()) WHERE firm_id=$1 AND id=$2`, firmID, notificationID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
 func (s *Store) AuditEvents(ctx context.Context, firmID string) ([]domain.AuditEvent, error) {
 	rows, e := s.Pool.Query(ctx, `SELECT a.id,u.name,a.action,a.resource_type,a.resource_id,a.metadata,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.user_id WHERE a.firm_id=$1 ORDER BY a.created_at DESC LIMIT 200`, firmID)
 	if e != nil {

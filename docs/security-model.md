@@ -25,7 +25,7 @@ The built-in rate limiter is defense in depth for a single API instance. A produ
 
 Audit metadata excludes passwords, cookies, authorization values and content. Legal records use soft deletion where appropriate; document objects are retained until an explicit retention process. Structured logs include request IDs but avoid client documents and arbitrary field values.
 
-Outbound portal e-mail jobs keep recipient and one-time URLs only in AES-GCM encrypted payloads. Completed and terminally failed jobs discard ciphertext. Invitation and reset tables store token hashes, not raw tokens. Production SMTP requires STARTTLS; password recovery does not reveal account existence and successful resets revoke portal sessions.
+Outbound e-mail jobs keep recipients, alert text and one-time URLs only in AES-GCM encrypted payloads. Completed and terminally failed jobs discard ciphertext. Deadline/task delivery is opt-in and uses non-sensitive deduplication keys. Invitation and reset tables store token hashes, not raw tokens. Production SMTP requires STARTTLS; password recovery does not reveal account existence and successful resets revoke portal sessions.
 
 ## Privacy
 

@@ -59,9 +59,13 @@ func TestPostgresQueueClaimsJobOnceAcrossWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	queued, err := first.EnqueueEmail(ctx, firmID, mailer.Message{To: "client@example.test", Subject: "Portal", Text: "one-time-link"})
+	queued, err := first.EnsureEmail(ctx, firmID, "test-notification:"+suffix, mailer.Message{To: "client@example.test", Subject: "Portal", Text: "one-time-link"})
 	if err != nil || !queued {
 		t.Fatalf("enqueue: queued=%v err=%v", queued, err)
+	}
+	queued, err = second.EnsureEmail(ctx, firmID, "test-notification:"+suffix, mailer.Message{To: "client@example.test", Subject: "Portal duplicate", Text: "duplicate"})
+	if err != nil || !queued {
+		t.Fatalf("deduplicated enqueue: queued=%v err=%v", queued, err)
 	}
 	var workers sync.WaitGroup
 	workers.Add(2)
@@ -76,10 +80,11 @@ func TestPostgresQueueClaimsJobOnceAcrossWorkers(t *testing.T) {
 	}
 	var status string
 	var payloadMissing bool
-	if err = pool.QueryRow(ctx, `SELECT status,encrypted_payload IS NULL FROM outbound_jobs WHERE firm_id=$1 ORDER BY created_at DESC LIMIT 1`, firmID).Scan(&status, &payloadMissing); err != nil {
+	var jobCount int
+	if err = pool.QueryRow(ctx, `SELECT count(*),min(status),bool_and(encrypted_payload IS NULL) FROM outbound_jobs WHERE firm_id=$1 AND deduplication_key=$2`, firmID, "test-notification:"+suffix).Scan(&jobCount, &status, &payloadMissing); err != nil {
 		t.Fatal(err)
 	}
-	if status != "completed" || !payloadMissing {
-		t.Fatalf("unexpected terminal job state: status=%s payloadMissing=%v", status, payloadMissing)
+	if jobCount != 1 || status != "completed" || !payloadMissing {
+		t.Fatalf("unexpected terminal job state: count=%d status=%s payloadMissing=%v", jobCount, status, payloadMissing)
 	}
 }

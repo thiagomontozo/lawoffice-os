@@ -26,6 +26,7 @@ All errors use `{ "error": { "code", "message", "requestId" } }`. Internal endpo
 - `/api/v1/deadlines`, `/tasks`, `/calendar`, `/workflows`
 - `POST /api/v1/conflicts/check`
 - `GET /api/v1/search`, `/dashboard`, `/notifications`, `/stream`
+- `GET` and `PUT /api/v1/notifications/preferences` manage the authenticated user's opt-in e-mail alerts.
 
 `GET /api/v1/stream` accepts the standard `Last-Event-ID` header. Reconnects replay up to 500 retained events for the authenticated firm; an initial connection without the header begins with live events.
 

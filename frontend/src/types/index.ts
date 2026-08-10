@@ -67,6 +67,10 @@ export type Task = {
   dueAt?: string;
   assigneeName?: string;
 };
+export type NotificationPreferences = {
+  emailDeadlines: boolean;
+  emailTasks: boolean;
+};
 export type DocumentItem = {
   id: string;
   matterId?: string;
