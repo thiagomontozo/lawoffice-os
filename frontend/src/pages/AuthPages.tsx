@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Building2,
   CheckCircle2,
@@ -283,6 +283,12 @@ export function PortalLogin() {
         />
         {error && <p className="text-red-700">{error}</p>}
         <Button className="w-full">Acessar portal</Button>
+        <Link
+          to={`/portal/forgot-password?firm=${encodeURIComponent(form.firmSlug)}`}
+          className="block text-center text-sm font-semibold text-brand-primary hover:underline"
+        >
+          Esqueci minha senha
+        </Link>
       </form>
     </AuthShell>
   );

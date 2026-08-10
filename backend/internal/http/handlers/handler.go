@@ -8,6 +8,7 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/config"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
 	appmw "github.com/thiagomontozo/lawoffice-os/backend/internal/http/middleware"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/jobs"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/service"
@@ -31,10 +32,11 @@ type Handler struct {
 	Config  config.Config
 	Logger  *slog.Logger
 	Hub     *realtime.Hub
+	Jobs    *jobs.Queue
 }
 
-func New(r *repository.Store, s *service.Service, o storage.ObjectStorage, db *pgxpool.Pool, c config.Config, l *slog.Logger, h *realtime.Hub) *Handler {
-	return &Handler{r, s, o, db, c, l, h}
+func New(r *repository.Store, s *service.Service, o storage.ObjectStorage, db *pgxpool.Pool, c config.Config, l *slog.Logger, h *realtime.Hub, queue *jobs.Queue) *Handler {
+	return &Handler{Store: r, Service: s, Storage: o, DB: db, Config: c, Logger: l, Hub: h, Jobs: queue}
 }
 
 type envelope struct {

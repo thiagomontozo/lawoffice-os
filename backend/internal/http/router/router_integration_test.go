@@ -19,6 +19,7 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/config"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/database"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/handlers"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/jobs"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/observability"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
@@ -69,7 +70,11 @@ func newIntegrationApp(t *testing.T) *integrationApp {
 		Timezone:      "America/Sao_Paulo",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	handler := handlers.New(store, service.New(store, objects, nil, cfg.MaxUpload), objects, pool, cfg, logger, hub)
+	jobQueue, err := jobs.New(pool, cfg.SessionSecret, nil, logger)
+	if err != nil {
+		t.Fatalf("jobs: %v", err)
+	}
+	handler := handlers.New(store, service.New(store, objects, nil, cfg.MaxUpload), objects, pool, cfg, logger, hub, jobQueue)
 	return &integrationApp{handler: New(handler, store, cfg, observability.NewMetrics()), pool: pool, hub: hub}
 }
 
@@ -200,6 +205,11 @@ func TestHTTPAuthenticationFirmIsolationPortalAndSessionRevocation(t *testing.T)
 	portalMatter := app.request(t, http.MethodGet, "/api/v1/portal/matters/"+matterID, nil, portalSession)
 	if portalMatter.Code != http.StatusOK {
 		t.Fatalf("shared portal Matter unavailable: status=%d body=%s", portalMatter.Code, portalMatter.Body.String())
+	}
+	knownRecovery := app.request(t, http.MethodPost, "/api/v1/portal/password/forgot", map[string]any{"firmSlug": "integration-alpha" + suffix, "email": portalEmail})
+	unknownRecovery := app.request(t, http.MethodPost, "/api/v1/portal/password/forgot", map[string]any{"firmSlug": "integration-alpha" + suffix, "email": "unknown." + suffix + "@example.test"})
+	if knownRecovery.Code != http.StatusAccepted || unknownRecovery.Code != http.StatusAccepted || knownRecovery.Body.String() != unknownRecovery.Body.String() {
+		t.Fatalf("password recovery disclosed account existence: known=%d/%s unknown=%d/%s", knownRecovery.Code, knownRecovery.Body.String(), unknownRecovery.Code, unknownRecovery.Body.String())
 	}
 
 	changed := app.request(t, http.MethodPost, "/api/v1/auth/change-password", map[string]any{

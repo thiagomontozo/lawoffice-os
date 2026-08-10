@@ -154,6 +154,39 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	if err != nil || firmID != ownerA.FirmID || authenticatedPortalID != portalID || !auth.CheckPassword(storedHash, "portal-password-strong") {
 		t.Fatalf("portal credentials unavailable: firm=%s portal=%s err=%v", firmID, authenticatedPortalID, err)
 	}
+	_, portalSessionHash, err := auth.NewToken("portal-test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.CreatePortalSession(ctx, ownerA.FirmID, portalID, portalSessionHash, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	_, resetHash, err := auth.NewToken("portal-test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resetFirmID, err := store.CreatePortalPasswordReset(ctx, slugA, "portal@example.test", resetHash, time.Now().Add(time.Hour))
+	if err != nil || resetFirmID != ownerA.FirmID {
+		t.Fatalf("create portal password reset: firm=%s err=%v", resetFirmID, err)
+	}
+	resetPassword, err := auth.HashPassword("portal-password-replaced")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resetFirmID, resetPortalID, err := store.ResetPortalPassword(ctx, resetHash, resetPassword)
+	if err != nil || resetFirmID != ownerA.FirmID || resetPortalID != portalID {
+		t.Fatalf("reset portal password: firm=%s portal=%s err=%v", resetFirmID, resetPortalID, err)
+	}
+	if _, _, err = store.PortalBySession(ctx, portalSessionHash); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("portal password reset should revoke sessions, got %v", err)
+	}
+	_, _, replacedHash, err := store.PortalCredentials(ctx, slugA, "portal@example.test")
+	if err != nil || !auth.CheckPassword(replacedHash, "portal-password-replaced") {
+		t.Fatalf("portal password was not replaced: %v", err)
+	}
+	if _, _, err = store.ResetPortalPassword(ctx, resetHash, resetPassword); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("portal password reset should be single use, got %v", err)
+	}
 	if _, _, err = store.PortalDocument(ctx, ownerA.FirmID, portalID, doc.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("private document leaked to portal, got %v", err)
 	}

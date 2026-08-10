@@ -20,6 +20,16 @@ Suggested first alerts:
 | memory | heap grows continuously across normal traffic cycles | capture runtime profile in a controlled environment |
 | backup age | no successful archive in 24 hours | stop relying on the current recovery objective and repair backups |
 
+When SMTP is enabled, also alert on terminal outbound jobs. The following operational query contains no decrypted recipient or message content:
+
+```sql
+SELECT status, count(*)
+FROM outbound_jobs
+GROUP BY status;
+```
+
+Investigate recurring `failed` rows using structured worker logs and job IDs. Do not expose or manually decrypt queue payloads during routine support.
+
 Thresholds must be tuned from real traffic. The values above are cautious starting points, not product guarantees.
 
 ## Backup

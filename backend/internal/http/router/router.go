@@ -25,6 +25,8 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config, metric
 	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/auth/login", h.Login)
 	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/portal/login", h.PortalLogin)
 	r.With(appmw.RateLimit(10, time.Minute, handlers.WriteError)).Post("/api/v1/portal/invitations/accept", h.AcceptPortalInvitation)
+	r.With(appmw.RateLimit(5, 15*time.Minute, handlers.WriteError)).Post("/api/v1/portal/password/forgot", h.ForgotPortalPassword)
+	r.With(appmw.RateLimit(10, 15*time.Minute, handlers.WriteError)).Post("/api/v1/portal/password/reset", h.ResetPortalPassword)
 	r.Post("/api/v1/portal/logout", h.PortalLogout)
 	r.Get("/api/v1/portal/matters", h.PortalMatters)
 	r.Get("/api/v1/portal/matters/{id}", h.PortalMatter)

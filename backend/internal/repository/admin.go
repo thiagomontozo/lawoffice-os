@@ -442,6 +442,9 @@ func (s *Store) PublishDueNotificationsLocked(ctx context.Context, horizon time.
 	if _, err = tx.Exec(ctx, `WITH expired AS (SELECT id FROM realtime_events WHERE expires_at<=now() ORDER BY id LIMIT 10000) DELETE FROM realtime_events e USING expired WHERE e.id=expired.id`); err != nil {
 		return 0, true, err
 	}
+	if _, err = tx.Exec(ctx, `WITH expired AS (SELECT id FROM portal_password_resets WHERE expires_at<now()-interval '7 days' OR used_at<now()-interval '7 days' ORDER BY created_at LIMIT 10000) DELETE FROM portal_password_resets r USING expired WHERE r.id=expired.id`); err != nil {
+		return 0, true, err
+	}
 	count := int(result.RowsAffected())
 	if err = tx.Commit(ctx); err != nil {
 		return 0, true, err
@@ -510,6 +513,56 @@ func (s *Store) PortalCredentials(ctx context.Context, slug, email string) (stri
 		return "", "", "", ErrNotFound
 	}
 	return firmID, userID, passwordHash, err
+}
+func (s *Store) CreatePortalPasswordReset(ctx context.Context, slug, email string, tokenHash []byte, expiresAt time.Time) (string, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	var firmID, portalUserID string
+	err = tx.QueryRow(ctx, `SELECT p.firm_id,p.id FROM portal_users p JOIN firms f ON f.id=p.firm_id WHERE f.slug=$1 AND lower(p.email)=lower($2) AND p.active AND p.password_hash IS NOT NULL FOR UPDATE OF p`, slug, email).Scan(&firmID, &portalUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE portal_password_resets SET used_at=now() WHERE firm_id=$1 AND portal_user_id=$2 AND used_at IS NULL`, firmID, portalUserID); err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO portal_password_resets(firm_id,portal_user_id,token_hash,expires_at) VALUES($1,$2,$3,$4)`, firmID, portalUserID, tokenHash, expiresAt); err != nil {
+		return "", mapError(err)
+	}
+	return firmID, tx.Commit(ctx)
+}
+func (s *Store) ResetPortalPassword(ctx context.Context, tokenHash []byte, passwordHash string) (string, string, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer tx.Rollback(ctx)
+	var resetID, firmID, portalUserID string
+	err = tx.QueryRow(ctx, `SELECT r.id,r.firm_id,r.portal_user_id FROM portal_password_resets r JOIN portal_users p ON p.id=r.portal_user_id AND p.firm_id=r.firm_id WHERE r.token_hash=$1 AND r.used_at IS NULL AND r.expires_at>now() AND p.active FOR UPDATE OF r`, tokenHash).Scan(&resetID, &firmID, &portalUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrNotFound
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE portal_users SET password_hash=$3 WHERE firm_id=$1 AND id=$2`, firmID, portalUserID, passwordHash); err != nil {
+		return "", "", err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE portal_password_resets SET used_at=now() WHERE id=$1`, resetID); err != nil {
+		return "", "", err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM portal_sessions WHERE firm_id=$1 AND portal_user_id=$2`, firmID, portalUserID); err != nil {
+		return "", "", err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", "", err
+	}
+	return firmID, portalUserID, nil
 }
 func (s *Store) TouchPortalLogin(ctx context.Context, firmID, portalUserID string) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE portal_users SET last_login_at=now() WHERE firm_id=$1 AND id=$2`, firmID, portalUserID)

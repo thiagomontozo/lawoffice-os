@@ -214,6 +214,168 @@ export function PortalAcceptInvitation() {
   );
 }
 
+export function PortalForgotPassword() {
+  const [params] = useSearchParams();
+  const [firmSlug, setFirmSlug] = useState(params.get("firm") ?? "");
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    try {
+      await post("/api/v1/portal/password/forgot", { firmSlug, email });
+      setSubmitted(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível solicitar a recuperação.",
+      );
+    }
+  }
+  return (
+    <div className="grid min-h-screen place-items-center bg-slate-950 p-5">
+      <Card className="w-full max-w-md p-8">
+        <p className="text-xs font-bold uppercase tracking-[.2em] text-brand-primary">
+          Portal seguro
+        </p>
+        <h1 className="mt-3 text-2xl font-bold">Recupere seu acesso</h1>
+        {submitted ? (
+          <div className="mt-6 space-y-4">
+            <p className="text-sm text-slate-600">
+              Se os dados corresponderem a uma conta ativa, enviaremos um link
+              válido por uma hora. Verifique também a caixa de spam.
+            </p>
+            <Link
+              className="font-semibold text-brand-primary"
+              to="/portal/login"
+            >
+              Voltar ao login
+            </Link>
+          </div>
+        ) : (
+          <form
+            onSubmit={(event) => void submit(event)}
+            className="mt-6 space-y-4"
+          >
+            <label className="block text-sm font-medium">
+              Escritório
+              <input
+                required
+                className="mt-1.5 w-full rounded-xl border px-3 py-2.5"
+                value={firmSlug}
+                onChange={(event) => setFirmSlug(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm font-medium">
+              E-mail
+              <input
+                required
+                type="email"
+                className="mt-1.5 w-full rounded-xl border px-3 py-2.5"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            {error && (
+              <p role="alert" className="text-sm text-red-700">
+                {error}
+              </p>
+            )}
+            <Button className="w-full">Enviar link seguro</Button>
+          </form>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+export function PortalResetPassword() {
+  const [params] = useSearchParams();
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [complete, setComplete] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (password !== confirmation) {
+      setError("As senhas precisam ser iguais.");
+      return;
+    }
+    try {
+      await post("/api/v1/portal/password/reset", {
+        token: params.get("token") ?? "",
+        password,
+      });
+      setComplete(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível redefinir a senha.",
+      );
+    }
+  }
+  return (
+    <div className="grid min-h-screen place-items-center bg-slate-950 p-5">
+      <Card className="w-full max-w-md p-8">
+        <p className="text-xs font-bold uppercase tracking-[.2em] text-brand-primary">
+          Portal seguro
+        </p>
+        <h1 className="mt-3 text-2xl font-bold">Defina uma nova senha</h1>
+        {complete ? (
+          <div className="mt-6 space-y-4">
+            <p className="text-emerald-700">
+              Senha alterada e sessões anteriores encerradas.
+            </p>
+            <Link
+              className="font-semibold text-brand-primary"
+              to="/portal/login"
+            >
+              Entrar no portal
+            </Link>
+          </div>
+        ) : (
+          <form
+            onSubmit={(event) => void submit(event)}
+            className="mt-6 space-y-4"
+          >
+            <label className="block text-sm font-medium">
+              Nova senha
+              <input
+                required
+                minLength={12}
+                type="password"
+                className="mt-1.5 w-full rounded-xl border px-3 py-2.5"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm font-medium">
+              Confirme a senha
+              <input
+                required
+                minLength={12}
+                type="password"
+                className="mt-1.5 w-full rounded-xl border px-3 py-2.5"
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+              />
+            </label>
+            {error && (
+              <p role="alert" className="text-sm text-red-700">
+                {error}
+              </p>
+            )}
+            <Button className="w-full">Redefinir senha</Button>
+          </form>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function PortalShell({
   children,
   branding,

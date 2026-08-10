@@ -35,6 +35,7 @@ Lists use `page` and `pageSize` (maximum 100) and feature-specific filters such 
 
 - `POST /api/v1/portal/login`, `/logout`
 - `POST /api/v1/portal/invitations/accept`
+- `POST /api/v1/portal/password/forgot`, `/portal/password/reset`
 - `GET /api/v1/portal/matters`, `/portal/matters/:id`
 - `GET /api/v1/portal/documents/:id/download`
 - `GET /api/v1/portal/users` (requires `portal.manage`)
