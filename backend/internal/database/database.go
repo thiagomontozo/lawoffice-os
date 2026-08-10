@@ -31,7 +31,18 @@ func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	return p, nil
 }
 func Migrate(ctx context.Context, p *pgxpool.Pool, dir string) error {
-	if _, e := p.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations(name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())`); e != nil {
+	connection, e := p.Acquire(ctx)
+	if e != nil {
+		return e
+	}
+	defer connection.Release()
+	if _, e = connection.Exec(ctx, `SELECT pg_advisory_lock(hashtext('lawoffice_os_schema_migrations'))`); e != nil {
+		return e
+	}
+	defer func() {
+		_, _ = connection.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtext('lawoffice_os_schema_migrations'))`)
+	}()
+	if _, e = connection.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations(name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())`); e != nil {
 		return e
 	}
 	entries, e := os.ReadDir(dir)
@@ -47,7 +58,7 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, dir string) error {
 	sort.Strings(names)
 	for _, name := range names {
 		var exists bool
-		if e = p.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name=$1)`, name).Scan(&exists); e != nil {
+		if e = connection.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name=$1)`, name).Scan(&exists); e != nil {
 			return e
 		}
 		if exists {
@@ -57,7 +68,7 @@ func Migrate(ctx context.Context, p *pgxpool.Pool, dir string) error {
 		if e != nil {
 			return e
 		}
-		tx, e := p.Begin(ctx)
+		tx, e := connection.Begin(ctx)
 		if e != nil {
 			return e
 		}
