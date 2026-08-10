@@ -16,6 +16,9 @@ if (-not (Get-Command pg_dump -ErrorAction SilentlyContinue)) {
 
 $backupRoot = [IO.Path]::GetFullPath($BackupDirectory)
 $storageRoot = [IO.Path]::GetFullPath($StoragePath)
+if (-not (Test-Path -LiteralPath $storageRoot -PathType Container)) {
+    throw "Local storage directory not found: $storageRoot. S3 deployments must use bucket versioning/replication or an S3-native export."
+}
 New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
 $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 $staging = Join-Path $backupRoot ".lawoffice-backup-$stamp-$([guid]::NewGuid().ToString('N'))"
@@ -31,9 +34,7 @@ try {
 
     $storageBackup = Join-Path $staging "storage"
     New-Item -ItemType Directory -Path $storageBackup | Out-Null
-    if (Test-Path -LiteralPath $storageRoot -PathType Container) {
-        Get-ChildItem -LiteralPath $storageRoot -Force | Copy-Item -Destination $storageBackup -Recurse -Force
-    }
+    Get-ChildItem -LiteralPath $storageRoot -Force | Copy-Item -Destination $storageBackup -Recurse -Force
 
     $checksums = @{}
     Get-ChildItem -LiteralPath $staging -File -Recurse | ForEach-Object {

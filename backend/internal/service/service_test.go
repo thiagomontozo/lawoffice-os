@@ -5,14 +5,23 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io"
 	"mime/multipart"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/scanner"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/storage"
 )
+
+type threatScanner struct{}
+
+func (threatScanner) Scan(context.Context, io.Reader) error { return scanner.ErrThreat }
+func (threatScanner) Health(context.Context) error          { return nil }
 
 func uploadHeader(t *testing.T, name string, content []byte) *multipart.FileHeader {
 	t.Helper()
@@ -43,7 +52,7 @@ func TestStoreUploadStreamsAndCalculatesIntegrity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := New(nil, objects, 1024*1024)
+	service := New(nil, objects, nil, 1024*1024)
 	content := []byte("legal document content")
 	key, mimeType, name, size, checksum, err := service.storeUpload(context.Background(), "firm-id", uploadHeader(t, "memo.txt", content))
 	if err != nil {
@@ -66,9 +75,29 @@ func TestStoreUploadRejectsExtensionMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := New(nil, objects, 1024)
+	service := New(nil, objects, nil, 1024)
 	_, _, _, _, _, err = service.storeUpload(context.Background(), "firm-id", uploadHeader(t, "malware.pdf", []byte("plain text")))
 	if err == nil {
 		t.Fatal("expected extension mismatch")
+	}
+}
+
+func TestStoreUploadScansBeforeObjectCommit(t *testing.T) {
+	root := t.TempDir()
+	objects, err := storage.NewLocal(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := New(nil, objects, threatScanner{}, 1024)
+	_, _, _, _, _, err = service.storeUpload(context.Background(), "firm-id", uploadHeader(t, "memo.txt", []byte("suspicious")))
+	if !errors.Is(err, ErrValidation) {
+		t.Fatalf("threat should be rejected as validation error, got %v", err)
+	}
+	entries, readErr := os.ReadDir(root)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("scanner rejection committed %d storage objects", len(entries))
 	}
 }

@@ -217,6 +217,10 @@ No real legal data should be used until deployment security, backups and validat
 | `SESSION_SECRET` | session HMAC key | required |
 | `METRICS_TOKEN` | optional bearer token enabling `/metrics` | disabled |
 | `STORAGE_PATH` | local object root | `./data/storage` |
+| `STORAGE_DRIVER` | `local` or S3-compatible `s3` adapter | `local` |
+| `S3_*` | endpoint, bucket, credentials, region and TLS for S3/MinIO | disabled |
+| `UPLOAD_SCAN_MODE` | `off` or fail-closed ClamAV `required` | `off` |
+| `CLAMAV_ADDRESS` | ClamAV TCP service used for streaming scans | required by scan mode |
 | `MAX_UPLOAD_MB` | upload limit, 1–100 | `25` |
 | `LOG_LEVEL` | structured log level | `info` |
 | `DEFAULT_LOCALE` | firm setup fallback | `pt-BR` |
@@ -232,7 +236,7 @@ The initial migration creates the multi-firm relational model, constraints, inde
 
 ## Object Storage
 
-`ObjectStorage` exposes `Put`, `Open`, `Delete` and `Health`. The local adapter enforces root confinement and atomic placement. S3/MinIO support belongs to V0.2.
+`ObjectStorage` exposes `Put`, `Open`, `Delete` and `Health`. The local adapter enforces root confinement and atomic placement; the S3-compatible adapter supports managed S3 and MinIO without changing document business rules. Uploads can be scanned through ClamAV before an object is committed. Required scan mode fails closed and participates in readiness.
 
 ## Docker
 
@@ -291,7 +295,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 
 - The automated suite is intentionally focused on critical foundations and does not yet cover every handler or React interaction.
 - PostgreSQL distributes live SSE events across replicas, but the bounded replay window remains instance-local rather than a durable event log.
-- Local object storage assumes a single shared filesystem and has no virus scanner or preview service.
+- Local object storage still assumes a single shared filesystem. S3/MinIO and ClamAV adapters are available, but document previews and asynchronous quarantine review are not.
 - Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
 - Portal invitations must be delivered by the firm; password recovery and per-field sharing controls are not yet available.
 - The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter. Metrics now provide a monitoring foundation, but alert delivery and dashboards remain deployment responsibilities.

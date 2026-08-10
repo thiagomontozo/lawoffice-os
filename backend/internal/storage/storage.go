@@ -28,8 +28,8 @@ func NewLocal(root string) (*Local, error) {
 	return &Local{root: filepath.Clean(abs)}, nil
 }
 func (s *Local) path(key string) (string, error) {
-	if key == "" || filepath.IsAbs(key) || strings.ContainsAny(key, `/\`) || filepath.Base(key) != key {
-		return "", errors.New("invalid storage key")
+	if err := validateObjectKey(key); err != nil {
+		return "", err
 	}
 	p := filepath.Join(s.root, key)
 	rel, e := filepath.Rel(s.root, p)
@@ -37,6 +37,13 @@ func (s *Local) path(key string) (string, error) {
 		return "", errors.New("storage key escapes root")
 	}
 	return p, nil
+}
+
+func validateObjectKey(key string) error {
+	if key == "" || filepath.IsAbs(key) || strings.ContainsAny(key, `/\`) || filepath.Base(key) != key {
+		return errors.New("invalid storage key")
+	}
+	return nil
 }
 
 type contextReader struct {

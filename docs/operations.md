@@ -24,7 +24,7 @@ Thresholds must be tuned from real traffic. The values above are cautious starti
 
 ## Backup
 
-`scripts/backup.ps1` creates one ZIP containing a PostgreSQL custom-format dump, object-storage files, a format manifest and SHA-256 checksums.
+For `STORAGE_DRIVER=local`, `scripts/backup.ps1` creates one ZIP containing a PostgreSQL custom-format dump, object-storage files, a format manifest and SHA-256 checksums. S3 deployments must pair the database backup with provider-native bucket versioning, replication or an S3-native export; the local script refuses a missing storage directory rather than producing a silently incomplete archive.
 
 ```powershell
 $env:DATABASE_URL = "postgres://..."

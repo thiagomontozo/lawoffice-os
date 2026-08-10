@@ -30,7 +30,7 @@ React Router separates public login/setup, protected `/app` routes and `/portal`
 
 ## Database and storage
 
-PostgreSQL holds relational state and authorization relationships. Composite `(id, firm_id)` constraints prevent cross-firm relationships. Binary documents are stored through `ObjectStorage`; only immutable version metadata and a current-version pointer live in PostgreSQL.
+PostgreSQL holds relational state and authorization relationships. Composite `(id, firm_id)` constraints prevent cross-firm relationships. Binary documents are stored through `ObjectStorage`; only immutable version metadata and a current-version pointer live in PostgreSQL. Local filesystem and S3-compatible adapters share this boundary. Optional fail-closed ClamAV streaming happens before object commit and participates in readiness when configured as required.
 
 ## SSE and failure modes
 
@@ -38,4 +38,4 @@ SSE delivers notification, timeline and task events with event IDs, heartbeats a
 
 ## Future scale
 
-The next scale boundaries are S3/MinIO for shared objects, a durable event log if cross-instance replay becomes necessary, a dedicated search implementation behind `SearchService`, and a separate job worker if scheduler volume grows. These can evolve without splitting every domain into a service.
+The next scale boundaries are a durable event log if cross-instance replay becomes necessary, a dedicated search implementation behind `SearchService`, and a separate job worker if scheduler volume grows. These can evolve without splitting every domain into a service.

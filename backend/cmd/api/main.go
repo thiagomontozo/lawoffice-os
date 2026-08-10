@@ -17,6 +17,7 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/observability"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/scanner"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/scheduler"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/service"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/storage"
@@ -41,13 +42,22 @@ func main() {
 		logger.Error("migration failed", "error", err)
 		os.Exit(1)
 	}
-	objects, err := storage.NewLocal(cfg.StoragePath)
+	var objects storage.ObjectStorage
+	if cfg.StorageDriver == "s3" {
+		objects, err = storage.NewS3(ctx, storage.S3Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, Region: cfg.S3Region, UseTLS: cfg.S3UseTLS, CreateBucket: cfg.S3CreateBucket})
+	} else {
+		objects, err = storage.NewLocal(cfg.StoragePath)
+	}
 	if err != nil {
-		logger.Error("storage initialization failed", "error", err)
+		logger.Error("storage initialization failed", "driver", cfg.StorageDriver, "error", err)
 		os.Exit(1)
 	}
+	var uploadScanner scanner.Scanner = scanner.Disabled{}
+	if cfg.UploadScanMode == "required" {
+		uploadScanner = scanner.NewClamAV(cfg.ClamAVAddress)
+	}
 	store := repository.New(db)
-	services := service.New(store, objects, cfg.MaxUpload)
+	services := service.New(store, objects, uploadScanner, cfg.MaxUpload)
 	hub := realtime.New()
 	if err = realtime.StartPostgres(ctx, db, hub, logger); err != nil {
 		logger.Warn("database realtime unavailable; using local delivery", "error", err)

@@ -69,7 +69,7 @@ func newIntegrationApp(t *testing.T) *integrationApp {
 		Timezone:      "America/Sao_Paulo",
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	handler := handlers.New(store, service.New(store, objects, cfg.MaxUpload), objects, pool, cfg, logger, hub)
+	handler := handlers.New(store, service.New(store, objects, nil, cfg.MaxUpload), objects, pool, cfg, logger, hub)
 	return &integrationApp{handler: New(handler, store, cfg, observability.NewMetrics()), pool: pool, hub: hub}
 }
 
