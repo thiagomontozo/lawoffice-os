@@ -73,4 +73,4 @@ Do not delete the `.pre-restore-*` storage directory until validation and retent
 
 ## Scaling boundaries
 
-PostgreSQL already coordinates migrations, distributes live notifications and locks the scheduler. The current rate limiter remains per API instance and the SSE replay buffer is memory-local. A multi-instance production rollout still needs an edge/shared limiter and a durable event replay mechanism.
+PostgreSQL coordinates migrations, persists and distributes realtime events, and locks the scheduler. The current rate limiter remains per API instance, so a multi-instance production rollout still needs an edge/shared limiter. SSE retains seven days and returns at most 500 events per reconnect; monitor clients that exceed that recovery window.

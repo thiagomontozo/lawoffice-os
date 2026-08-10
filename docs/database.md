@@ -8,7 +8,7 @@ Business tables include `firm_id`; composite uniqueness on `(id, firm_id)` enabl
 
 ## Indexes
 
-Indexes prioritize firm/status/time access paths: Matter status/priority/updated, legal case/internal number, documents by Matter, deadlines/tasks/hearings by due time, timeline ordering, notifications and audit chronology. The second migration enables the trusted `pg_trgm` extension and adds partial GIN indexes for active Matter, client, contact, document, party and tag names. Global search combines substring matching with trigram relevance ranking while retaining firm and Matter authorization predicates.
+Indexes prioritize firm/status/time access paths: Matter status/priority/updated, legal case/internal number, documents by Matter, deadlines/tasks/hearings by due time, timeline ordering, notifications and audit chronology. The second migration enables the trusted `pg_trgm` extension and adds partial GIN indexes for active Matter, client, contact, document, party and tag names. Global search combines substring matching with trigram relevance ranking while retaining firm and Matter authorization predicates. The fourth migration adds a seven-day `realtime_events` log indexed by firm and monotonic ID; the coordinated scheduler removes expired rows in bounded batches.
 
 ## Records and retention
 

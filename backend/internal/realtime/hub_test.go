@@ -10,8 +10,8 @@ func TestHubIsolatesFirmsAndReplaysMissedEvents(t *testing.T) {
 	hub := New()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	alpha, _ := hub.Subscribe(ctx, "alpha", "")
-	beta, _ := hub.Subscribe(ctx, "beta", "")
+	alpha, _, _ := hub.Subscribe(ctx, "alpha", "")
+	beta, _, _ := hub.Subscribe(ctx, "beta", "")
 	hub.Publish("alpha", Event{Type: "matter.updated", ResourceType: "matter", ResourceID: "one"})
 	var first Event
 	select {
@@ -28,7 +28,10 @@ func TestHubIsolatesFirmsAndReplaysMissedEvents(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 	hub.Publish("alpha", Event{Type: "task.updated", ResourceType: "task", ResourceID: "two"})
-	reconnected, replay := hub.Subscribe(ctx, "alpha", first.ID)
+	reconnected, replay, err := hub.Subscribe(ctx, "alpha", first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() { _ = reconnected }()
 	if len(replay) != 1 || replay[0].ResourceID != "two" {
 		t.Fatalf("unexpected replay: %+v", replay)
@@ -37,7 +40,7 @@ func TestHubIsolatesFirmsAndReplaysMissedEvents(t *testing.T) {
 
 func TestHubCloseClosesSubscribers(t *testing.T) {
 	hub := New()
-	stream, _ := hub.Subscribe(context.Background(), "firm", "")
+	stream, _, _ := hub.Subscribe(context.Background(), "firm", "")
 	hub.Close()
 	if _, open := <-stream; open {
 		t.Fatal("subscriber remained open")

@@ -42,7 +42,7 @@ flowchart LR
     API --> PG[(PostgreSQL)]
     API --> Storage[(Object Storage)]
     API --> Scheduler["Managed Scheduler"]
-    API --> SSE["SSE Hub + PostgreSQL NOTIFY"]
+    API --> SSE["Durable SSE + PostgreSQL NOTIFY"]
 ```
 
 ```mermaid
@@ -294,7 +294,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 ## Limitations
 
 - The automated suite is intentionally focused on critical foundations and does not yet cover every handler or React interaction.
-- PostgreSQL distributes live SSE events across replicas, but the bounded replay window remains instance-local rather than a durable event log.
+- SSE replay is durable for seven days and capped at 500 events per reconnect; clients that remain offline beyond that window must perform a full data refresh.
 - Local object storage still assumes a single shared filesystem. S3/MinIO and ClamAV adapters are available, but document previews and asynchronous quarantine review are not.
 - Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
 - Portal invitations must be delivered by the firm; password recovery and per-field sharing controls are not yet available.

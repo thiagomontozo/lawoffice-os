@@ -1083,16 +1083,28 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
-	events, replay := h.Hub.Subscribe(r.Context(), u.FirmID, r.Header.Get("Last-Event-ID"))
+	events, replay, err := h.Hub.Subscribe(r.Context(), u.FirmID, r.Header.Get("Last-Event-ID"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	_, _ = fmt.Fprint(w, "event: connected\ndata: {}\n\n")
 	flusher.Flush()
+	lastSent, _ := strconv.ParseInt(r.Header.Get("Last-Event-ID"), 10, 64)
 	writeEvent := func(event realtime.Event) bool {
+		eventID, parseErr := strconv.ParseInt(event.ID, 10, 64)
+		if parseErr == nil && eventID <= lastSent {
+			return true
+		}
 		payload, err := json.Marshal(event)
 		if err != nil {
 			return false
 		}
 		_, err = fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", event.ID, event.Type, payload)
 		if err == nil {
+			if parseErr == nil {
+				lastSent = eventID
+			}
 			flusher.Flush()
 		}
 		return err == nil
