@@ -22,6 +22,8 @@ All errors use `{ "error": { "code", "message", "requestId" } }`. Internal endpo
 - `/api/v1/clients`
 - `/api/v1/matters`, `/matters/:id`
 - `/api/v1/matters/:id/archive`, `/reopen`
+- `POST /api/v1/matters/:id/ai/query` performs permission-aware RAG over current extracted versions.
+- `POST /api/v1/matters/:id/ai/feedback` records a helpful/not-helpful rating without persisting the prompt or answer.
 - `/api/v1/documents`, `/documents/:id/versions`, `/download`
 - `GET /api/v1/documents/:id/extraction` returns authorized current-version text pages; `POST /extraction/reprocess` reenqueues it.
 - `/api/v1/deadlines`, `/tasks`, `/calendar`, `/workflows`

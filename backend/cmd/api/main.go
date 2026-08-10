@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/ai"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/config"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/database"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/handlers"
@@ -62,6 +63,19 @@ func main() {
 	}
 	store := repository.New(db)
 	services := service.New(store, objects, uploadScanner, cfg.MaxUpload)
+	var generator ai.Generator
+	var embedder ai.Embedder
+	var embeddingWorker *ai.EmbeddingWorker
+	if cfg.AIMode == "openai" {
+		provider := &ai.OpenAI{
+			APIKey: cfg.OpenAIAPIKey, BaseURL: cfg.AIBaseURL, Model: cfg.AIModel,
+			EmbeddingModelName: cfg.AIEmbeddingModel, Client: &http.Client{Timeout: cfg.AITimeout},
+		}
+		generator = provider
+		embedder = provider
+		embeddingWorker = ai.NewEmbeddingWorker(store, provider, logger)
+	}
+	aiWorkspace := &ai.Workspace{Store: store, Generator: generator, Embedder: embedder, MaxContextChars: cfg.AIMaxContextCharacters, MaxSources: cfg.AIMaxSources}
 	var extractionWorker *ocr.Worker
 	if cfg.OCRMode != "off" {
 		var provider ocr.Provider = ocr.Builtin{MaxBytes: cfg.OCRMaxInput}
@@ -87,8 +101,8 @@ func main() {
 	if err = realtime.StartPostgres(ctx, db, hub, logger); err != nil {
 		logger.Warn("database realtime unavailable; using local delivery", "error", err)
 	}
-	handler := handlers.New(store, services, objects, db, cfg, logger, hub, jobQueue)
-	metrics := observability.NewMetrics()
+	handler := handlers.New(store, services, objects, db, cfg, logger, hub, jobQueue, aiWorkspace)
+	metrics := observability.NewMetrics(aiWorkspace)
 	server := &http.Server{Addr: ":" + cfg.Port, Handler: router.New(handler, store, cfg, metrics), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
 	var background sync.WaitGroup
 	background.Add(2)
@@ -97,6 +111,13 @@ func main() {
 		go func() {
 			defer background.Done()
 			extractionWorker.Run(ctx)
+		}()
+	}
+	if embeddingWorker != nil {
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			embeddingWorker.Run(ctx)
 		}()
 	}
 	go func() {

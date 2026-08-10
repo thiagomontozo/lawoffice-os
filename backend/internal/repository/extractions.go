@@ -59,6 +59,9 @@ func (s *Store) CompleteDocumentExtraction(ctx context.Context, workerID string,
 			confidenceCount++
 		}
 	}
+	if err = replaceDocumentChunks(ctx, tx, item, pages); err != nil {
+		return err
+	}
 	var average *float64
 	if confidenceCount > 0 {
 		value := confidenceTotal / float64(confidenceCount)

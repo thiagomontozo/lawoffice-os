@@ -64,6 +64,8 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config, metric
 		a.With(appmw.Permission("clients.archive", handlers.WriteError)).Delete("/api/v1/contacts/{id}", h.ArchiveContact)
 		a.With(appmw.Permission("matter.read", handlers.WriteError)).Get("/api/v1/matters", h.Matters)
 		a.With(appmw.Permission("matter.read", handlers.WriteError)).Get("/api/v1/matters/{id}", h.Matter)
+		a.With(appmw.Permission("matter.read", handlers.WriteError), appmw.RateLimit(20, time.Minute, handlers.WriteError)).Post("/api/v1/matters/{id}/ai/query", h.AskMatterAI)
+		a.With(appmw.Permission("matter.read", handlers.WriteError), appmw.RateLimit(60, time.Minute, handlers.WriteError)).Post("/api/v1/matters/{id}/ai/feedback", h.MatterAIFeedback)
 		a.With(appmw.Permission("matter.create", handlers.WriteError)).Post("/api/v1/matters", h.CreateMatter)
 		a.With(appmw.Permission("matter.update", handlers.WriteError)).Patch("/api/v1/matters/{id}/status", h.UpdateMatterStatus)
 		a.With(appmw.Permission("matter.update", handlers.WriteError)).Post("/api/v1/matters/{id}/parties", h.AddParty)

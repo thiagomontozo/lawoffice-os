@@ -166,6 +166,30 @@ func TestFirmIsolationMatterAccessAndDocuments(t *testing.T) {
 	if err = store.RestoreDocument(ctx, ownerA.FirmID, doc.ID); err != nil {
 		t.Fatalf("restore failed: %v", err)
 	}
+	claimed, err := store.ClaimDocumentExtractions(ctx, "integration-ocr", 20)
+	if err != nil {
+		t.Fatalf("claim extraction: %v", err)
+	}
+	var claimedDocument *domain.ClaimedDocumentExtraction
+	for index := range claimed {
+		if claimed[index].DocumentID == doc.ID {
+			claimedDocument = &claimed[index]
+			break
+		}
+	}
+	if claimedDocument == nil {
+		t.Fatal("document extraction was not claimable")
+	}
+	if err = store.CompleteDocumentExtraction(ctx, "integration-ocr", *claimedDocument, "integration", "pt-BR", []domain.DocumentExtractionPage{{PageNumber: 1, Content: "Cláusula de confidencialidade com vencimento em dezembro."}}); err != nil {
+		t.Fatalf("complete extraction and chunks: %v", err)
+	}
+	candidates, err := store.MatterRetrievalCandidates(ctx, ownerA.FirmID, other.ID, matter.ID, "confidencialidade", nil, 20)
+	if err != nil || len(candidates) != 1 || candidates[0].DocumentID != doc.ID || candidates[0].PageNumber != 1 {
+		t.Fatalf("authorized retrieval failed: candidates=%+v err=%v", candidates, err)
+	}
+	if _, err = store.MatterRetrievalCandidates(ctx, ownerB.FirmID, ownerB.ID, matter.ID, "confidencialidade", nil, 20); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("cross-firm retrieval should be forbidden, got %v", err)
+	}
 	portalToken, portalTokenHash, err := auth.NewToken("portal-test-secret")
 	if err != nil || portalToken == "" {
 		t.Fatalf("create portal token: %v", err)

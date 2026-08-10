@@ -3,8 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/ai"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/config"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
 	appmw "github.com/thiagomontozo/lawoffice-os/backend/internal/http/middleware"
@@ -33,10 +35,15 @@ type Handler struct {
 	Logger  *slog.Logger
 	Hub     *realtime.Hub
 	Jobs    *jobs.Queue
+	AI      *ai.Workspace
 }
 
-func New(r *repository.Store, s *service.Service, o storage.ObjectStorage, db *pgxpool.Pool, c config.Config, l *slog.Logger, h *realtime.Hub, queue *jobs.Queue) *Handler {
-	return &Handler{Store: r, Service: s, Storage: o, DB: db, Config: c, Logger: l, Hub: h, Jobs: queue}
+func New(r *repository.Store, s *service.Service, o storage.ObjectStorage, db *pgxpool.Pool, c config.Config, l *slog.Logger, h *realtime.Hub, queue *jobs.Queue, workspaces ...*ai.Workspace) *Handler {
+	var workspace *ai.Workspace
+	if len(workspaces) > 0 {
+		workspace = workspaces[0]
+	}
+	return &Handler{Store: r, Service: s, Storage: o, DB: db, Config: c, Logger: l, Hub: h, Jobs: queue, AI: workspace}
 }
 
 type envelope struct {
@@ -81,6 +88,13 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, e error) {
 		WriteError(w, r, 409, "CONFLICT", "Resource already exists or is in use")
 	case errors.Is(e, repository.ErrForbidden):
 		WriteError(w, r, 403, "FORBIDDEN", "Access denied")
+	case errors.Is(e, ai.ErrDisabled):
+		WriteError(w, r, 503, "AI_DISABLED", "Matter AI Workspace is not enabled")
+	case errors.Is(e, ai.ErrNoSources):
+		WriteError(w, r, 409, "AI_SOURCES_UNAVAILABLE", "No extracted document sources are available for this Matter")
+	case ai.IsOperationalError(e):
+		h.Logger.Warn("AI provider unavailable", "request_id", appmw.RequestIDValue(r), "error_type", fmt.Sprintf("%T", e))
+		WriteError(w, r, 502, "AI_PROVIDER_UNAVAILABLE", "The AI provider could not complete the request")
 	default:
 		h.Logger.Error("request failed", "request_id", appmw.RequestIDValue(r), "error", e)
 		WriteError(w, r, 500, "INTERNAL_ERROR", "Request could not be completed")

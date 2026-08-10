@@ -39,3 +39,5 @@ Folders provide simple Matter organization without pretending to be a general fi
 ## OCR and extracted text
 
 Each version has an independent asynchronous extraction. Text and confidence are persisted per page; failures never replace or damage the original object. Built-in extraction covers textual office formats and an HTTPS adapter supports specialist PDF/image OCR services. Authorization is evaluated again when extracted text is read or reprocessing is requested. See [OCR](ocr.md) for the provider contract and limits.
+
+Successful extraction atomically rebuilds bounded, overlapping chunks with document/version/page lineage and a content hash. Chunks are derived search data and can be regenerated. Only current versions participate in the Matter RAG workspace; cited users can return to the authoritative document. See [Matter AI Workspace](ai-workspace.md).

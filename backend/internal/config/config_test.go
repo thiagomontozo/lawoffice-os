@@ -100,3 +100,20 @@ func TestProductionRemoteOCRRequiresHTTPSAndToken(t *testing.T) {
 		t.Fatal("production OCR with weak token should be rejected")
 	}
 }
+
+func TestProductionAIRequiresHTTPSAndCredential(t *testing.T) {
+	validEnvironment(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("SESSION_SECRET", "a-production-session-secret-with-entropy")
+	t.Setenv("AI_MODE", "openai")
+	t.Setenv("OPENAI_BASE_URL", "http://ai.example.test/v1")
+	t.Setenv("OPENAI_API_KEY", "provider-key")
+	if _, err := Load(); err == nil {
+		t.Fatal("production AI over HTTP should be rejected")
+	}
+	t.Setenv("OPENAI_BASE_URL", "https://ai.example.test/v1")
+	t.Setenv("OPENAI_API_KEY", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("AI without provider credential should be rejected")
+	}
+}

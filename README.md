@@ -43,6 +43,8 @@ flowchart LR
     API --> Storage[(Object Storage)]
     API --> Scheduler["Managed Scheduler"]
     API --> SSE["Durable SSE + PostgreSQL NOTIFY"]
+    API --> RAG["Permission-aware RAG"]
+    RAG --> AI["Optional AI provider"]
 ```
 
 ```mermaid
@@ -85,6 +87,7 @@ The screenshots below use fictional demonstration data. No real client, legal or
 - Frontend: React, TypeScript strict mode, Vite, React Router, Tailwind CSS
 - Database: PostgreSQL with versioned SQL migrations
 - Storage: local filesystem behind an `ObjectStorage` interface
+- Document intelligence: asynchronous OCR, PostgreSQL retrieval, optional embeddings and Responses API generation
 - Realtime: Server-Sent Events
 - Deployment assets: multi-stage Dockerfiles and Docker Compose
 
@@ -127,6 +130,10 @@ Uploading a new version never silently overwrites the prior object. The current 
 ## OCR and searchable document text
 
 Every immutable document version receives an asynchronous extraction record. The built-in provider handles TXT, DOCX and XLSX; a bounded HTTPS provider contract supports scanned PDF and image OCR. Text is stored per page with confidence metadata and PostgreSQL full-text indexes. Users can inspect status, review extracted pages and explicitly reprocess the current version. The original file remains authoritative. See [OCR and document extraction](docs/ocr.md).
+
+## Matter AI Workspace and RAG
+
+Matter Detail includes a private question-and-answer workspace over authorized current document versions, with cited starting points for summaries, chronology drafts, date review and clause comparison. Extraction output is chunked with page/version lineage, PostgreSQL provides lexical candidates, and optional embeddings add bounded semantic reranking. The generator receives only selected source blocks, disables provider-side response storage, treats document text as untrusted evidence and returns source cards for professional review. Questions and answers are not persisted; audit stores only sanitized operational metadata. The feature is disabled by default. See [Matter AI Workspace and RAG](docs/ai-workspace.md).
 
 ## Deadlines and Tasks
 
@@ -231,6 +238,11 @@ No real legal data should be used until deployment security, backups and validat
 | `LOG_LEVEL` | structured log level | `info` |
 | `DEFAULT_LOCALE` | firm setup fallback | `pt-BR` |
 | `DEFAULT_TIMEZONE` | firm setup fallback | `America/Sao_Paulo` |
+| `OCR_*` | extraction mode/provider and bounded input/output controls | disabled |
+| `AI_MODE` | off or optional OpenAI Matter provider | `off` |
+| `OPENAI_API_KEY` | external provider credential; never committed | empty |
+| `AI_MODEL`, `AI_EMBEDDING_MODEL` | configurable generation and embedding models | see `.env.example` |
+| `AI_MAX_CONTEXT_CHARACTERS`, `AI_MAX_SOURCES`, `AI_TIMEOUT_SECONDS` | retrieval/provider resource bounds | `40000`, `8`, `60` |
 
 ## API
 
@@ -295,18 +307,19 @@ compose.yml          PostgreSQL + API + web + persistent storage
 
 ## Design Decisions
 
-Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monolith, Matter domain, firm isolation, layered authorization, object storage, versioning, white label, SSE and structured archive.
+Thirteen ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monolith, Matter domain, firm isolation, layered authorization, object storage, versioning, white label, SSE, structured archive and permission-aware RAG.
 
 ## Limitations
 
 - The automated suite is intentionally focused on critical foundations and does not yet cover every handler or React interaction.
 - SSE replay is durable for seven days and capped at 500 events per reconnect; clients that remain offline beyond that window must perform a full data refresh.
 - Local object storage still assumes a single shared filesystem. S3/MinIO and ClamAV adapters are available, but document previews and asynchronous quarantine review are not.
-- Search uses ranked PostgreSQL matching, indexed trigrams and extracted document text, but semantic retrieval is delivered in the RAG milestone rather than the OCR worker.
+- RAG semantic ranking is computed in Go over a bounded PostgreSQL candidate set; very large corpora may eventually require a permission-preserving vector index.
 - SMTP supports invitations, password recovery and opt-in deadline/task alerts through the durable queue. Bounce handling, digest scheduling and per-field portal sharing controls are not yet available.
 - The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter. Metrics now provide a monitoring foundation, but alert delivery and dashboards remain deployment responsibilities.
 - Scheduler notification rules are basic and do not calculate legal procedural deadlines.
-- No e-mail/SMS, calendar provider, court connector, OCR, AI, SSO or SaaS billing.
+- No SMS, external calendar provider, court connector, autonomous legal advice, SSO or SaaS billing.
+- OCR quality depends on the configured provider. AI output can be incomplete or wrong and always requires source review; enabling an external provider requires a confidentiality and data-processing assessment.
 
 ## Roadmap
 
@@ -331,10 +344,10 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 
 ### v0.4
 
-- private legal AI workspace
-- Matter-scoped RAG and permission-aware retrieval
-- document summarization and chronology generation
-- semantic legal search
+- evaluated retrieval quality and citation-grounding datasets
+- background document summaries and chronology drafts with approval
+- scalable permission-aware vector indexing
+- optional self-hosted model and embedding adapters
 
 ### v0.5
 
@@ -343,7 +356,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 - advanced analytics
 - enterprise SSO
 
-AI is deliberately not implemented. A future Matter AI Workspace must never retrieve a document the requesting user cannot access.
+The initial AI Workspace is deliberately assistive: no autonomous actions, cross-Matter retrieval, legal advice or automatic deadline calculation. Any future AI capability must preserve the same backend authorization and source-verification boundary.
 
 ## Contributing
 

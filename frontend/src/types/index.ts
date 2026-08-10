@@ -100,6 +100,25 @@ export type DocumentExtraction = {
   completedAt?: string;
   pages: { pageNumber: number; content: string; confidence?: number }[];
 };
+export type AICitation = {
+  sourceId: string;
+  documentId: string;
+  documentTitle: string;
+  documentVersionId: string;
+  pageNumber: number;
+  excerpt: string;
+  relevance: number;
+};
+export type AIAnswer = {
+  id: string;
+  matterId: string;
+  answer: string;
+  citations: AICitation[];
+  model: string;
+  retrieval: "keyword" | "hybrid";
+  disclaimer: string;
+  generatedAt: string;
+};
 export type MatterEvent = {
   id: string;
   type: string;

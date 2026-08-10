@@ -11,6 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Badge, Button, Card, Empty, Loading, PageHeader } from "../app/ui";
+import { MatterAI } from "../features/ai/MatterAI";
 import { api } from "../services/api";
 import type { MatterDetail as Detail } from "../types";
 const tabs = [
@@ -25,6 +26,7 @@ const tabs = [
   "Calendar",
   "Notes",
   "Finance",
+  "AI Workspace",
   "Audit",
 ] as const;
 export function MatterDetailPage() {
@@ -137,6 +139,7 @@ export function MatterDetailPage() {
         />
       )}{" "}
       {tab === "Finance" && <Finance data={data} />}{" "}
+      {tab === "AI Workspace" && <MatterAI matterId={m.id} data={data} />}{" "}
       {["Team", "Workflow", "Calendar", "Audit"].includes(tab) && (
         <Placeholder title={tab} />
       )}
