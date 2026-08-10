@@ -91,7 +91,7 @@ func (s *Store) MatterRetrievalCandidates(ctx context.Context, firmID, userID, m
 	FROM document_chunks c
 	JOIN documents d ON d.id=c.document_id AND d.firm_id=c.firm_id
 	WHERE c.firm_id=$1 AND c.matter_id=$2 AND d.deleted_at IS NULL AND d.current_version_id=c.document_version_id
-	  AND (cardinality($3::uuid[])=0 OR c.document_id=ANY($3::uuid[]))
+	  AND (COALESCE(cardinality($3::uuid[]),0)=0 OR c.document_id=ANY($3::uuid[]))
 	ORDER BY CASE WHEN btrim($4)='' THEN 0 ELSE ts_rank_cd(c.search_vector,websearch_to_tsquery('portuguese',$4)) END DESC,
 	         c.document_id,c.page_number,c.chunk_index
 	LIMIT $5`, firmID, matterID, documentIDs, query, limit)
