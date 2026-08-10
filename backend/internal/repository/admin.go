@@ -439,6 +439,9 @@ func (s *Store) PublishDueNotificationsLocked(ctx context.Context, horizon time.
 	if err != nil {
 		return 0, true, err
 	}
+	if _, err = tx.Exec(ctx, `WITH expired AS (SELECT id FROM realtime_events WHERE expires_at<=now() ORDER BY id LIMIT 10000) DELETE FROM realtime_events e USING expired WHERE e.id=expired.id`); err != nil {
+		return 0, true, err
+	}
 	count := int(result.RowsAffected())
 	if err = tx.Commit(ctx); err != nil {
 		return 0, true, err

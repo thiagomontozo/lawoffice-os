@@ -27,6 +27,8 @@ All errors use `{ "error": { "code", "message", "requestId" } }`. Internal endpo
 - `POST /api/v1/conflicts/check`
 - `GET /api/v1/search`, `/dashboard`, `/notifications`, `/stream`
 
+`GET /api/v1/stream` accepts the standard `Last-Event-ID` header. Reconnects replay up to 500 retained events for the authenticated firm; an initial connection without the header begins with live events.
+
 Lists use `page` and `pageSize` (maximum 100) and feature-specific filters such as `q`, `status`, `priority`, `type`, `matterId`, `archived` and `mine`. Uploads use multipart form data.
 
 ## Portal
