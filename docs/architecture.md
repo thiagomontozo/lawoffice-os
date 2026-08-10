@@ -28,6 +28,8 @@ Outbound e-mail uses a separate PostgreSQL-backed worker. Atomic `SKIP LOCKED` c
 
 Document OCR/text extraction is another cancellation-aware worker, but uses dedicated relational jobs because its page output is durable domain data rather than an outbound message. A trigger creates one extraction per immutable version. Workers open opaque object keys only after a database claim, validate provider output and commit all pages atomically. The HTTP API repeats document and Matter authorization before exposing any extracted text.
 
+Successful extraction also rebuilds version/page-aware chunks. PostgreSQL full-text search is the baseline retrieval path. When AI is enabled, a separate leased worker computes embeddings and the Matter AI Workspace performs bounded hybrid reranking in Go. Retrieval repeats firm and Matter authorization before any source text can leave the database. The provider adapter receives only selected excerpts, is time/size bounded and the application does not persist prompts or answers.
+
 ## Frontend
 
 React Router separates public login/setup, protected `/app` routes and `/portal`. An authentication context loads the user, firm and branding. CSS variables apply the firm palette. The app layout owns desktop navigation, mobile navigation, global search, quick create and the Ctrl/Cmd+K command palette. Feature pages handle loading, empty, error and populated states.
@@ -42,4 +44,4 @@ SSE delivers notification, timeline and task events with event IDs and heartbeat
 
 ## Future scale
 
-The next scale boundaries are a dedicated search implementation behind `SearchService` and a separate job worker if scheduler volume grows. These can evolve without splitting every domain into a service.
+The next scale boundaries are a permission-aware vector index behind the retrieval seam and separate worker deployments if OCR/embedding volume grows. These can evolve without splitting every domain into a service.

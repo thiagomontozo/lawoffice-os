@@ -23,6 +23,8 @@ The built-in rate limiter is defense in depth for a single API instance. A produ
 
 OCR output is untrusted derived data. The worker uses opaque storage keys, bounds input and output, validates page numbers/confidence, sanitizes error states and never logs document text. Remote OCR is optional, requires HTTPS and a bearer token in production, and must undergo a deployment-specific privacy and retention review.
 
+RAG repeats firm and Matter authorization before selecting chunks and only uses current, non-deleted document versions. Optional document filters can narrow but never broaden that set. Extracted text is delimited as untrusted evidence; model instructions explicitly reject commands embedded in documents. Provider requests are bounded, timed out and sent with storage disabled. The application does not persist questions or generated answers, and audit metadata contains only a question hash, length and operational identifiers. External AI remains disabled by default and requires an explicit confidentiality, residency, retention and vendor assessment.
+
 ## Audit, deletion and logging
 
 Audit metadata excludes passwords, cookies, authorization values and content. Legal records use soft deletion where appropriate; document objects are retained until an explicit retention process. Structured logs include request IDs but avoid client documents and arbitrary field values.

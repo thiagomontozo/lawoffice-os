@@ -173,6 +173,38 @@ type ClaimedDocumentExtraction struct {
 	StorageKey, MimeType, OriginalFileName    string
 	Attempts, MaxAttempts                     int
 }
+type DocumentChunk struct {
+	ID, FirmID, MatterID, DocumentID, DocumentVersionID string
+	DocumentTitle                                       string
+	PageNumber, ChunkIndex, CharacterCount              int
+	Content, ContentHash                                string
+	EmbeddingModel                                      string
+	KeywordScore                                        float64
+	Embedding                                           []float32 `json:"-"`
+}
+type ClaimedEmbeddingChunk struct {
+	ID, FirmID, Content string
+	Attempts            int
+}
+type AICitation struct {
+	SourceID        string  `json:"sourceId"`
+	DocumentID      string  `json:"documentId"`
+	DocumentTitle   string  `json:"documentTitle"`
+	DocumentVersion string  `json:"documentVersionId"`
+	PageNumber      int     `json:"pageNumber"`
+	Excerpt         string  `json:"excerpt"`
+	Relevance       float64 `json:"relevance"`
+}
+type AIAnswer struct {
+	ID          string       `json:"id"`
+	MatterID    string       `json:"matterId"`
+	Answer      string       `json:"answer"`
+	Citations   []AICitation `json:"citations"`
+	Model       string       `json:"model"`
+	Retrieval   string       `json:"retrieval"`
+	Disclaimer  string       `json:"disclaimer"`
+	GeneratedAt time.Time    `json:"generatedAt"`
+}
 type Deadline struct {
 	ID           string     `json:"id"`
 	MatterID     string     `json:"matterId"`

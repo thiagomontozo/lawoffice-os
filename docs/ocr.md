@@ -32,4 +32,4 @@ Page numbers must be positive and unique, confidence must be between zero and on
 
 The worker receives only internal storage keys from PostgreSQL. Users cannot provide a path. The API checks the existing document and Matter authorization before returning text or accepting reprocessing. Provider tokens are environment variables and are never persisted or logged. Deployments must contractually review provider retention, training, residency and incident-response terms before sending legal documents outside their infrastructure.
 
-Extracted text is untrusted input. Future RAG/AI components must treat it as evidence, not instructions, and repeat firm, Matter and document authorization before retrieval.
+Extracted text is untrusted input. The RAG/AI layer treats it as evidence, not instructions, and repeats firm, Matter and document authorization before retrieval. Successful extraction rebuilds version/page-aware chunks in the same transaction. See [Matter AI Workspace](ai-workspace.md).

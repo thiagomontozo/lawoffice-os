@@ -14,6 +14,8 @@ The fifth migration adds encrypted outbound jobs and hashed portal password-rese
 
 The seventh migration adds one `document_extractions` record per immutable version and page-level text in `document_extraction_pages`. A generated Portuguese `tsvector` and GIN index support full-text retrieval. Status, lease, attempt and sanitized error columns provide observable asynchronous processing without placing document contents in logs.
 
+The eighth migration adds version/page-aware `document_chunks` with generated full-text vectors, content hashes and optional JSON embeddings. Embedding status, leases and attempts form a durable worker queue. `ai_responses` and `ai_feedback` store only operational response identifiers, model/retrieval metadata and user ratings; prompts and generated answers are deliberately absent.
+
 ## Records and retention
 
 Matter, Client, User and Document metadata use soft-delete/disable semantics. Archive has its own closure record. Document bytes never enter a PostgreSQL BYTEA; version rows store object keys and checksums. Financial amounts are signed `bigint` cents with domain checks rather than floating point. Audit metadata is JSONB only for bounded, non-secret context—not as a substitute for core relational modeling.

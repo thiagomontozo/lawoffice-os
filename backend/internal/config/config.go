@@ -17,11 +17,12 @@ type Config struct {
 	StorageDriver, S3Endpoint, S3Bucket, S3AccessKey, S3SecretKey, S3Region, UploadScanMode, ClamAVAddress               string
 	SMTPMode, SMTPAddress, SMTPUsername, SMTPPassword, SMTPFrom, SMTPFromName                                            string
 	OCRMode, OCREndpoint, OCRToken, OCRLanguage                                                                          string
+	AIMode, AIBaseURL, OpenAIAPIKey, AIModel, AIEmbeddingModel                                                           string
 	JobEncryptionSecret                                                                                                  string
 	MaxUpload, OCRMaxInput                                                                                               int64
-	OCRMaxPages, OCRMaxCharacters                                                                                        int
+	OCRMaxPages, OCRMaxCharacters, AIMaxContextCharacters, AIMaxSources                                                  int
 	LogLevel                                                                                                             slog.Level
-	SessionTTL, OCRTimeout                                                                                               time.Duration
+	SessionTTL, OCRTimeout, AITimeout                                                                                    time.Duration
 	S3UseTLS, S3CreateBucket                                                                                             bool
 	SMTPRequireTLS                                                                                                       bool
 }
@@ -146,6 +147,42 @@ func Load() (Config, error) {
 		}
 		if c.Environment == "production" && len(c.OCRToken) < 24 {
 			return c, errors.New("OCR_TOKEN must contain at least 24 characters in production")
+		}
+	}
+	c.AIMode = strings.ToLower(value("AI_MODE", "off"))
+	c.AIBaseURL = value("OPENAI_BASE_URL", "https://api.openai.com/v1")
+	c.OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	c.AIModel = value("AI_MODEL", "gpt-5-mini")
+	c.AIEmbeddingModel = value("AI_EMBEDDING_MODEL", "text-embedding-3-small")
+	if c.AIMode != "off" && c.AIMode != "openai" {
+		return c, errors.New("AI_MODE must be off or openai")
+	}
+	c.AIMaxContextCharacters, e = strconv.Atoi(value("AI_MAX_CONTEXT_CHARACTERS", "40000"))
+	if e != nil || c.AIMaxContextCharacters < 4000 || c.AIMaxContextCharacters > 200000 {
+		return c, errors.New("AI_MAX_CONTEXT_CHARACTERS must be 4000..200000")
+	}
+	c.AIMaxSources, e = strconv.Atoi(value("AI_MAX_SOURCES", "8"))
+	if e != nil || c.AIMaxSources < 1 || c.AIMaxSources > 20 {
+		return c, errors.New("AI_MAX_SOURCES must be 1..20")
+	}
+	aiTimeoutSeconds, aiParseErr := strconv.Atoi(value("AI_TIMEOUT_SECONDS", "60"))
+	if aiParseErr != nil || aiTimeoutSeconds < 5 || aiTimeoutSeconds > 180 {
+		return c, errors.New("AI_TIMEOUT_SECONDS must be 5..180")
+	}
+	c.AITimeout = time.Duration(aiTimeoutSeconds) * time.Second
+	if c.AIMode == "openai" {
+		aiURL, urlErr := url.Parse(c.AIBaseURL)
+		if urlErr != nil || aiURL.Host == "" || (aiURL.Scheme != "http" && aiURL.Scheme != "https") {
+			return c, errors.New("OPENAI_BASE_URL must be an absolute HTTP(S) URL when AI_MODE=openai")
+		}
+		if c.Environment == "production" && aiURL.Scheme != "https" {
+			return c, errors.New("OPENAI_BASE_URL must use HTTPS in production")
+		}
+		if c.OpenAIAPIKey == "" {
+			return c, errors.New("OPENAI_API_KEY is required when AI_MODE=openai")
+		}
+		if strings.TrimSpace(c.AIModel) == "" || strings.TrimSpace(c.AIEmbeddingModel) == "" {
+			return c, errors.New("AI_MODEL and AI_EMBEDDING_MODEL are required when AI_MODE=openai")
 		}
 	}
 	c.StoragePath, e = filepath.Abs(c.StoragePath)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/ai"
 )
 
 type Metrics struct {
@@ -16,10 +17,15 @@ type Metrics struct {
 	requestsActive     atomic.Int64
 	responseClasses    [6]atomic.Uint64
 	durationNanosecond atomic.Uint64
+	aiWorkspace        *ai.Workspace
 }
 
-func NewMetrics() *Metrics {
-	return &Metrics{startedAt: time.Now().UTC()}
+func NewMetrics(workspaces ...*ai.Workspace) *Metrics {
+	var workspace *ai.Workspace
+	if len(workspaces) > 0 {
+		workspace = workspaces[0]
+	}
+	return &Metrics{startedAt: time.Now().UTC(), aiWorkspace: workspace}
 }
 
 func (m *Metrics) Middleware(next http.Handler) http.Handler {
@@ -52,6 +58,13 @@ func (m *Metrics) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	_, _ = fmt.Fprintf(w, "# HELP lawoffice_process_uptime_seconds Process uptime.\n# TYPE lawoffice_process_uptime_seconds gauge\nlawoffice_process_uptime_seconds %.0f\n", time.Since(m.startedAt).Seconds())
 	writeMetric(w, "lawoffice_go_goroutines", "Current number of Go goroutines.", "gauge", runtime.NumGoroutine())
 	writeMetric(w, "lawoffice_go_heap_bytes", "Bytes of allocated heap objects.", "gauge", memory.HeapAlloc)
+	if m.aiWorkspace != nil {
+		aiStats := m.aiWorkspace.Stats()
+		writeMetric(w, "lawoffice_ai_queries_total", "Matter AI queries attempted.", "counter", aiStats.QueriesTotal)
+		writeMetric(w, "lawoffice_ai_failures_total", "Matter AI queries that failed.", "counter", aiStats.FailuresTotal)
+		writeMetric(w, "lawoffice_ai_citations_total", "Source citations returned by Matter AI.", "counter", aiStats.CitationsTotal)
+		writeMetric(w, "lawoffice_ai_query_duration_seconds_total", "Cumulative Matter AI query time.", "counter", float64(aiStats.DurationNanos)/float64(time.Second))
+	}
 }
 
 func writeMetric(w http.ResponseWriter, name, help, metricType string, value any) {

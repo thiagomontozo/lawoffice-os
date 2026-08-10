@@ -49,6 +49,14 @@ services:
       OCR_MAX_PAGES: ${OCR_MAX_PAGES:-1000}
       OCR_MAX_CHARACTERS: ${OCR_MAX_CHARACTERS:-5000000}
       OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-90}
+      AI_MODE: ${AI_MODE:-off}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      AI_MODEL: ${AI_MODEL:-gpt-5-mini}
+      AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      AI_MAX_CONTEXT_CHARACTERS: ${AI_MAX_CONTEXT_CHARACTERS:-40000}
+      AI_MAX_SOURCES: ${AI_MAX_SOURCES:-8}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
     volumes: [document_storage:/data/storage]
     depends_on: {postgres: {condition: service_healthy}}
     restart: unless-stopped
