@@ -6,4 +6,10 @@ The portal is a separate layout and identity boundary. An authorized team member
 
 Brand Studio supplies the office logo, colors, portal title and welcome text. The administration screen lists invited accounts, last login, Matter count and active state. Revocation immediately deletes existing portal sessions. Re-invitation is allowed only while an invitation has not been accepted; an active credential cannot be silently replaced.
 
-V0.1 returns the invitation link to the authorized administrator for delivery through a trusted channel. Automated e-mail delivery, password recovery, document preview and per-field sharing controls are follow-up work.
+When SMTP is enabled, invitation delivery runs through a PostgreSQL job queue. Recipient, subject and one-time URL are encrypted with AES-GCM before insertion. Multiple replicas claim work with `SKIP LOCKED`, retry with bounded backoff and remove ciphertext after completion or terminal failure. The authorized administrator still receives the manual link as a controlled fallback.
+
+Delivery is at least once: a process failure after SMTP accepts a message but before the completion update can cause a duplicate. One-time tokens make duplicate links equivalent. Drain or expire pending jobs before rotating `JOB_ENCRYPTION_SECRET`; old ciphertext cannot be decrypted with a new key.
+
+Password recovery accepts firm slug and e-mail but always returns the same accepted response for known and unknown accounts. A known active account receives a one-hour, single-use link through the same durable queue. PostgreSQL stores only the token hash. A successful reset revokes every portal session and records a portal audit event.
+
+MFA, document preview, bounce/webhook processing, per-field sharing controls and user-managed notification preferences remain follow-up work. When SMTP is disabled, recovery cannot deliver a link and the firm must manage access through a fresh invitation.

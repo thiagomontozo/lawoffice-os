@@ -24,6 +24,8 @@ Handlers decode bounded input and translate errors. Services enforce cross-resou
 
 The scheduler is one cancellation-aware goroutine for the entire process, not one goroutine per deadline. Each cycle takes a PostgreSQL transaction-scoped advisory lock, so only one API replica scans near-term deadlines/tasks while idempotent inserts provide a second safety layer. SIGINT/SIGTERM cancels the scheduler, closes SSE, drains HTTP and then closes PostgreSQL.
 
+Outbound e-mail uses a separate PostgreSQL-backed worker. Atomic `SKIP LOCKED` claims allow multiple replicas, abandoned leases are reclaimed, and bounded retry ends in a terminal state. Sensitive payloads are encrypted before insertion and removed when processing ends.
+
 ## Frontend
 
 React Router separates public login/setup, protected `/app` routes and `/portal`. An authentication context loads the user, firm and branding. CSS variables apply the firm palette. The app layout owns desktop navigation, mobile navigation, global search, quick create and the Ctrl/Cmd+K command palette. Feature pages handle loading, empty, error and populated states.

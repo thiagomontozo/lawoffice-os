@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -17,6 +18,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/auth"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
+	appmw "github.com/thiagomontozo/lawoffice-os/backend/internal/http/middleware"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/mailer"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/service"
@@ -1136,6 +1139,69 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) ForgotPortalPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		FirmSlug string `json:"firmSlug"`
+		Email    string `json:"email"`
+	}
+	if decode(w, r, &in) != nil {
+		bad(w, r, "Invalid password recovery request")
+		return
+	}
+	in.FirmSlug = strings.ToLower(strings.TrimSpace(in.FirmSlug))
+	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	if !slugPattern.MatchString(in.FirmSlug) || !emailPattern.MatchString(in.Email) {
+		bad(w, r, "Valid firm and email are required")
+		return
+	}
+	token, tokenHash, err := auth.NewToken(h.Config.SessionSecret)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	firmID, err := h.Store.CreatePortalPasswordReset(r.Context(), in.FirmSlug, in.Email, tokenHash, time.Now().Add(time.Hour))
+	if err == nil {
+		resetURL := strings.TrimRight(h.Config.WebOrigin, "/") + "/portal/reset-password?token=" + url.QueryEscape(token)
+		if h.Jobs != nil {
+			if _, queueErr := h.Jobs.EnqueueEmail(r.Context(), firmID, mailer.Message{To: in.Email, Subject: "Redefinição de senha do portal", Text: "Recebemos uma solicitação para redefinir sua senha do portal. Use este link em até 1 hora:\n\n" + resetURL + "\n\nSe você não solicitou a alteração, ignore esta mensagem."}); queueErr != nil {
+				h.Logger.Error("portal password reset delivery enqueue failed", "request_id", appmw.RequestIDValue(r), "error", queueErr)
+			}
+		}
+	} else if !errors.Is(err, repository.ErrNotFound) {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func (h *Handler) ResetPortalPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if decode(w, r, &in) != nil || strings.TrimSpace(in.Token) == "" {
+		bad(w, r, "Token and password are required")
+		return
+	}
+	passwordHash, err := auth.HashPassword(in.Password)
+	if err != nil {
+		bad(w, r, err.Error())
+		return
+	}
+	firmID, portalUserID, err := h.Store.ResetPortalPassword(r.Context(), auth.TokenHash(strings.TrimSpace(in.Token), h.Config.SessionSecret), passwordHash)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			WriteError(w, r, http.StatusBadRequest, "INVALID_RESET", "Password reset is invalid, expired or already used")
+		} else {
+			h.fail(w, r, err)
+		}
+		return
+	}
+	ip, userAgent := auditContext(r)
+	_ = h.Store.AuditPortal(r.Context(), firmID, portalUserID, "portal.password_reset", "portal_user", &portalUserID, ip, userAgent)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset"})
+}
+
 func (h *Handler) PortalLogin(w http.ResponseWriter, r *http.Request) {
 	var in loginInput
 	if decode(w, r, &in) != nil {
@@ -1299,8 +1365,17 @@ func (h *Handler) CreatePortalInvitation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	invitationURL := strings.TrimRight(h.Config.WebOrigin, "/") + "/portal/accept?token=" + url.QueryEscape(token)
+	delivery := "manual"
+	if h.Jobs != nil {
+		queued, queueErr := h.Jobs.EnqueueEmail(r.Context(), u.FirmID, mailer.Message{To: strings.ToLower(in.Email), Subject: "Convite para o portal do cliente", Text: "O escritório compartilhou informações com você no portal do cliente. Ative seu acesso em até 72 horas:\n\n" + invitationURL})
+		if queueErr != nil {
+			h.Logger.Error("portal invitation delivery enqueue failed", "request_id", appmw.RequestIDValue(r), "error", queueErr)
+		} else if queued {
+			delivery = "queued"
+		}
+	}
 	h.audit(r, "portal.invitation_created", "portal_user", &id, map[string]any{"clientId": in.ClientID, "matterCount": len(in.MatterIDs)})
-	writeJSON(w, http.StatusCreated, map[string]string{"id": id, "invitationUrl": invitationURL, "expiresAt": expiresAt.UTC().Format(time.RFC3339)})
+	writeJSON(w, http.StatusCreated, map[string]string{"id": id, "invitationUrl": invitationURL, "expiresAt": expiresAt.UTC().Format(time.RFC3339), "delivery": delivery})
 }
 
 func (h *Handler) SetPortalUserActive(w http.ResponseWriter, r *http.Request) {

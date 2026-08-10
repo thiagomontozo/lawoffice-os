@@ -162,7 +162,7 @@ The persistent search and Ctrl/Cmd+K command palette rank and group authorized r
 
 ## Client Portal
 
-Portal users have separate credentials and sessions. An administrator creates a 72-hour, single-use invitation and the client defines their own password. A `PortalAccess` grant links that identity to selected Matters and defines shareable summary, timeline and appointments. Documents and events need an explicit `clientVisible` flag, downloads repeat authorization checks, revocation invalidates existing sessions, and the portal uses firm branding.
+Portal users have separate credentials and sessions. An administrator creates a 72-hour, single-use invitation and the client defines their own password. With SMTP enabled, invitations are delivered by an encrypted durable job queue; otherwise the authorized administrator receives a manual link. Password recovery uses a non-enumerating response and a one-hour, single-use token, then revokes existing portal sessions. A `PortalAccess` grant links that identity to selected Matters and defines shareable summary, timeline and appointments. Documents and events need an explicit `clientVisible` flag, downloads repeat authorization checks, revocation invalidates existing sessions, and the portal uses firm branding.
 
 ## Audit Trail
 
@@ -221,6 +221,8 @@ No real legal data should be used until deployment security, backups and validat
 | `S3_*` | endpoint, bucket, credentials, region and TLS for S3/MinIO | disabled |
 | `UPLOAD_SCAN_MODE` | `off` or fail-closed ClamAV `required` | `off` |
 | `CLAMAV_ADDRESS` | ClamAV TCP service used for streaming scans | required by scan mode |
+| `SMTP_*` | optional STARTTLS mail delivery for portal links | disabled |
+| `JOB_ENCRYPTION_SECRET` | encryption key for queued one-time links | `SESSION_SECRET` fallback |
 | `MAX_UPLOAD_MB` | upload limit, 1–100 | `25` |
 | `LOG_LEVEL` | structured log level | `info` |
 | `DEFAULT_LOCALE` | firm setup fallback | `pt-BR` |
@@ -297,7 +299,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 - SSE replay is durable for seven days and capped at 500 events per reconnect; clients that remain offline beyond that window must perform a full data refresh.
 - Local object storage still assumes a single shared filesystem. S3/MinIO and ClamAV adapters are available, but document previews and asynchronous quarantine review are not.
 - Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
-- Portal invitations must be delivered by the firm; password recovery and per-field sharing controls are not yet available.
+- SMTP supports invitation and password-reset delivery, but broader event e-mail preferences, bounce handling and per-field portal sharing controls are not yet available.
 - The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter. Metrics now provide a monitoring foundation, but alert delivery and dashboards remain deployment responsibilities.
 - Scheduler notification rules are basic and do not calculate legal procedural deadlines.
 - No e-mail/SMS, calendar provider, court connector, OCR, AI, SSO or SaaS billing.

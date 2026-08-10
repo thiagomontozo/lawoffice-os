@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/database"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/handlers"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/http/router"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/jobs"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/mailer"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/observability"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/realtime"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
@@ -58,14 +61,36 @@ func main() {
 	}
 	store := repository.New(db)
 	services := service.New(store, objects, uploadScanner, cfg.MaxUpload)
+	var emailSender mailer.Sender
+	if cfg.SMTPMode == "enabled" {
+		emailSender, err = mailer.NewSMTP(mailer.SMTPConfig{Address: cfg.SMTPAddress, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, FromName: cfg.SMTPFromName, RequireTLS: cfg.SMTPRequireTLS})
+		if err != nil {
+			logger.Error("email delivery initialization failed", "error", err)
+			os.Exit(1)
+		}
+	}
+	jobQueue, err := jobs.New(db, cfg.JobEncryptionSecret, emailSender, logger)
+	if err != nil {
+		logger.Error("outbound job queue initialization failed", "error", err)
+		os.Exit(1)
+	}
 	hub := realtime.New()
 	if err = realtime.StartPostgres(ctx, db, hub, logger); err != nil {
 		logger.Warn("database realtime unavailable; using local delivery", "error", err)
 	}
-	handler := handlers.New(store, services, objects, db, cfg, logger, hub)
+	handler := handlers.New(store, services, objects, db, cfg, logger, hub, jobQueue)
 	metrics := observability.NewMetrics()
 	server := &http.Server{Addr: ":" + cfg.Port, Handler: router.New(handler, store, cfg, metrics), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second}
-	go scheduler.New(store, logger).Run(ctx)
+	var background sync.WaitGroup
+	background.Add(2)
+	go func() {
+		defer background.Done()
+		scheduler.New(store, logger).Run(ctx)
+	}()
+	go func() {
+		defer background.Done()
+		jobQueue.Run(ctx)
+	}()
 	done := make(chan error, 1)
 	go func() {
 		logger.Info("LawOffice OS API started", "port", cfg.Port, "environment", cfg.Environment)
@@ -79,11 +104,22 @@ func main() {
 	case <-ctx.Done():
 		logger.Info("shutdown requested")
 	}
+	stop()
 	hub.Close()
 	shutdown, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err = server.Shutdown(shutdown); err != nil {
 		logger.Error("graceful shutdown timed out", "error", err)
+	}
+	backgroundDone := make(chan struct{})
+	go func() {
+		background.Wait()
+		close(backgroundDone)
+	}()
+	select {
+	case <-backgroundDone:
+	case <-shutdown.Done():
+		logger.Error("background workers did not stop before shutdown deadline")
 	}
 	logger.Info("LawOffice OS API stopped")
 }

@@ -15,10 +15,13 @@ import (
 type Config struct {
 	Environment, Port, DatabaseURL, WebOrigin, SessionSecret, MetricsToken, StoragePath, MigrationsDir, Locale, Timezone string
 	StorageDriver, S3Endpoint, S3Bucket, S3AccessKey, S3SecretKey, S3Region, UploadScanMode, ClamAVAddress               string
+	SMTPMode, SMTPAddress, SMTPUsername, SMTPPassword, SMTPFrom, SMTPFromName                                            string
+	JobEncryptionSecret                                                                                                  string
 	MaxUpload                                                                                                            int64
 	LogLevel                                                                                                             slog.Level
 	SessionTTL                                                                                                           time.Duration
 	S3UseTLS, S3CreateBucket                                                                                             bool
+	SMTPRequireTLS                                                                                                       bool
 }
 
 func Load() (Config, error) {
@@ -76,6 +79,34 @@ func Load() (Config, error) {
 	if c.UploadScanMode == "required" {
 		if _, _, splitErr := net.SplitHostPort(c.ClamAVAddress); splitErr != nil {
 			return c, errors.New("CLAMAV_ADDRESS must be a host:port when upload scanning is required")
+		}
+	}
+	c.SMTPMode = strings.ToLower(value("SMTP_MODE", "off"))
+	c.SMTPAddress = strings.TrimSpace(os.Getenv("SMTP_ADDRESS"))
+	c.SMTPUsername = strings.TrimSpace(os.Getenv("SMTP_USERNAME"))
+	c.SMTPPassword = strings.TrimSpace(os.Getenv("SMTP_PASSWORD"))
+	c.SMTPFrom = strings.TrimSpace(os.Getenv("SMTP_FROM"))
+	c.SMTPFromName = value("SMTP_FROM_NAME", "LawOffice OS")
+	c.JobEncryptionSecret = strings.TrimSpace(os.Getenv("JOB_ENCRYPTION_SECRET"))
+	if c.JobEncryptionSecret == "" {
+		c.JobEncryptionSecret = c.SessionSecret
+	}
+	c.SMTPRequireTLS, e = boolean("SMTP_REQUIRE_TLS", true)
+	if e != nil {
+		return c, e
+	}
+	if c.SMTPMode != "off" && c.SMTPMode != "enabled" {
+		return c, errors.New("SMTP_MODE must be off or enabled")
+	}
+	if c.SMTPMode == "enabled" {
+		if _, _, splitErr := net.SplitHostPort(c.SMTPAddress); splitErr != nil || c.SMTPFrom == "" {
+			return c, errors.New("SMTP_ADDRESS must be host:port and SMTP_FROM is required when SMTP is enabled")
+		}
+		if c.Environment == "production" && !c.SMTPRequireTLS {
+			return c, errors.New("SMTP_REQUIRE_TLS must be true in production")
+		}
+		if c.Environment == "production" && (c.JobEncryptionSecret == "change-me" || len(c.JobEncryptionSecret) < 32) {
+			return c, errors.New("JOB_ENCRYPTION_SECRET must contain at least 32 characters in production when SMTP is enabled")
 		}
 	}
 	c.StoragePath, e = filepath.Abs(c.StoragePath)

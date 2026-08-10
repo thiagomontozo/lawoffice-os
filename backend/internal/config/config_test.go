@@ -68,3 +68,20 @@ func TestRequiredUploadScannerNeedsAddress(t *testing.T) {
 		t.Fatalf("valid scanner configuration rejected: %v", err)
 	}
 }
+func TestProductionSMTPRequiresTLSAndStrongJobSecret(t *testing.T) {
+	validEnvironment(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("SESSION_SECRET", "a-production-session-secret-with-entropy")
+	t.Setenv("SMTP_MODE", "enabled")
+	t.Setenv("SMTP_ADDRESS", "smtp.example.test:587")
+	t.Setenv("SMTP_FROM", "portal@example.test")
+	t.Setenv("SMTP_REQUIRE_TLS", "false")
+	if _, err := Load(); err == nil {
+		t.Fatal("production SMTP without TLS should be rejected")
+	}
+	t.Setenv("SMTP_REQUIRE_TLS", "true")
+	t.Setenv("JOB_ENCRYPTION_SECRET", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("production SMTP with weak job encryption secret should be rejected")
+	}
+}

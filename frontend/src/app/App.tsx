@@ -24,8 +24,10 @@ import { DocumentsPage } from "../pages/DocumentsPage";
 import { BrandingPage } from "../pages/Branding";
 import {
   PortalAcceptInvitation,
+  PortalForgotPassword,
   PortalHome,
   PortalMatter,
+  PortalResetPassword,
 } from "../pages/Portal";
 import { PortalManagementPage } from "../pages/PortalManagement";
 import { SettingsPage } from "../pages/Settings";
@@ -42,6 +44,11 @@ export default function App() {
       <Route path="/setup" element={<SetupPage />} />
       <Route path="/portal/login" element={<PortalLogin />} />
       <Route path="/portal/accept" element={<PortalAcceptInvitation />} />
+      <Route
+        path="/portal/forgot-password"
+        element={<PortalForgotPassword />}
+      />
+      <Route path="/portal/reset-password" element={<PortalResetPassword />} />
       <Route path="/portal" element={<PortalHome />} />
       <Route path="/portal/matters/:id" element={<PortalMatter />} />
       <Route element={<Protected />}>

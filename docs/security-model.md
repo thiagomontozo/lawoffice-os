@@ -15,15 +15,17 @@ API responses set `nosniff`, deny framing, restrict referrers and browser capabi
 
 ## Uploads
 
-Requests are bounded before reading. Allowed V0.1 types are PDF, DOCX, XLSX, PNG, JPEG, WEBP and plain text; branding accepts only PNG/JPEG/WEBP. Content sniffing and extension agreement reduce spoofing. UUID-based storage keys avoid trusting original names. The local adapter cleans paths, rejects absolute/traversal input and verifies root confinement.
+Requests are bounded before reading. Allowed V0.1 types are PDF, DOCX, XLSX, PNG, JPEG, WEBP and plain text; branding accepts only PNG/JPEG/WEBP. Content sniffing and extension agreement reduce spoofing. UUID-based storage keys avoid trusting original names. Local and S3 adapters reject unsafe keys. Required ClamAV mode scans the request-temporary file before object commit and fails closed when the scanner is unavailable.
 
-Virus scanning, content-disarm, encrypted object storage and retention automation are deployment or future-version responsibilities. Uploaded files are never executed.
+Signature updates, content-disarm, storage-side encryption and retention automation remain deployment responsibilities. Uploaded files are never executed.
 
 The built-in rate limiter is defense in depth for a single API instance. A production deployment should also enforce distributed rate limits and abuse controls at a trusted reverse proxy or gateway.
 
 ## Audit, deletion and logging
 
 Audit metadata excludes passwords, cookies, authorization values and content. Legal records use soft deletion where appropriate; document objects are retained until an explicit retention process. Structured logs include request IDs but avoid client documents and arbitrary field values.
+
+Outbound portal e-mail jobs keep recipient and one-time URLs only in AES-GCM encrypted payloads. Completed and terminally failed jobs discard ciphertext. Invitation and reset tables store token hashes, not raw tokens. Production SMTP requires STARTTLS; password recovery does not reveal account existence and successful resets revoke portal sessions.
 
 ## Privacy
 
