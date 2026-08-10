@@ -216,6 +216,30 @@ func (s *Service) OpenDocument(ctx context.Context, firmID, userID, id string, v
 	return d, f, e
 }
 
+func (s *Service) DocumentExtraction(ctx context.Context, firmID, userID, documentID string, pageSize, offset int) (domain.DocumentExtraction, error) {
+	if pageSize < 1 || pageSize > 100 || offset < 0 {
+		return domain.DocumentExtraction{}, ErrValidation
+	}
+	if _, _, err := s.Store.DocumentVersion(ctx, firmID, userID, documentID, nil); err != nil {
+		return domain.DocumentExtraction{}, err
+	}
+	return s.Store.DocumentExtraction(ctx, firmID, documentID, pageSize, offset)
+}
+
+func (s *Service) ReprocessDocument(ctx context.Context, firmID, userID, documentID string) error {
+	document, _, err := s.Store.DocumentVersion(ctx, firmID, userID, documentID, nil)
+	if err != nil {
+		return err
+	}
+	if document.MatterID != nil {
+		allowed, accessErr := s.Store.CanAccessMatter(ctx, firmID, userID, *document.MatterID, "write")
+		if accessErr != nil || !allowed {
+			return repository.ErrForbidden
+		}
+	}
+	return s.Store.RequeueDocumentExtraction(ctx, firmID, documentID)
+}
+
 func (s *Service) DeleteDocument(ctx context.Context, firmID, userID, id string) error {
 	matterID, err := s.Store.DocumentMatter(ctx, firmID, id, false)
 	if err != nil {

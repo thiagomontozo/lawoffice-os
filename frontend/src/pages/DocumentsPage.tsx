@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   Download,
   FileClock,
+  FileSearch,
   FilePlus2,
+  RefreshCw,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -16,7 +18,7 @@ import {
   PageHeader,
 } from "../app/ui";
 import { api } from "../services/api";
-import type { DocumentItem, Matter } from "../types";
+import type { DocumentExtraction, DocumentItem, Matter } from "../types";
 
 type Version = {
   id: string;
@@ -39,6 +41,8 @@ export function DocumentsPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [retentionOpen, setRetentionOpen] = useState(false);
+  const [extractionOpen, setExtractionOpen] = useState(false);
+  const [extraction, setExtraction] = useState<DocumentExtraction>();
   const [deleted, setDeleted] = useState<DocumentItem[]>([]);
   const [selected, setSelected] = useState<DocumentItem>();
   const [versions, setVersions] = useState<Version[]>([]);
@@ -90,6 +94,27 @@ export function DocumentsPage() {
     setSelected(document);
     setVersions(result.items ?? []);
     setVersionsOpen(true);
+  }
+  async function showExtraction(document: DocumentItem) {
+    setSelected(document);
+    setExtractionOpen(true);
+    setExtraction(undefined);
+    const result = await api<DocumentExtraction>(
+      `/api/v1/documents/${document.id}/extraction?pageSize=100`,
+    );
+    setExtraction(result);
+  }
+  async function reprocessExtraction() {
+    if (!selected) return;
+    await api(`/api/v1/documents/${selected.id}/extraction/reprocess`, {
+      method: "POST",
+    });
+    setExtraction((current) =>
+      current
+        ? { ...current, status: "pending", errorCode: undefined }
+        : current,
+    );
+    setMessage("Documento reenfileirado para extração de texto/OCR.");
   }
   async function remove(document: DocumentItem) {
     if (
@@ -199,6 +224,13 @@ export function DocumentsPage() {
                 >
                   <FileClock size={15} />
                   Versões
+                </button>
+                <button
+                  onClick={() => void showExtraction(document)}
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-slate-700"
+                >
+                  <FileSearch size={15} />
+                  Texto/OCR
                 </button>
                 <button
                   onClick={() => void remove(document)}
@@ -330,6 +362,53 @@ export function DocumentsPage() {
         </div>
       </Modal>
       <Modal
+        open={extractionOpen}
+        title={`Texto/OCR · ${selected?.title ?? "Documento"}`}
+        onClose={() => setExtractionOpen(false)}
+      >
+        {!extraction ? (
+          <Loading />
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={extractionTone(extraction.status)}>
+                {extractionLabel(extraction.status)}
+              </Badge>
+              {extraction.provider ? (
+                <span className="text-xs text-slate-500">
+                  {extraction.provider} · {extraction.pageCount} página(s)
+                </span>
+              ) : null}
+            </div>
+            {extraction.errorCode ? (
+              <p
+                role="alert"
+                className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900"
+              >
+                Código: {extraction.errorCode}. O documento original permanece
+                disponível.
+              </p>
+            ) : null}
+            {extraction.pages.map((page) => (
+              <article key={page.pageNumber} className="rounded-xl border p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Página {page.pageNumber}
+                </h3>
+                <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap font-sans text-sm text-slate-700">
+                  {page.content}
+                </pre>
+              </article>
+            ))}
+            {extraction.status !== "processing" ? (
+              <Button onClick={() => void reprocessExtraction()}>
+                <RefreshCw size={15} className="mr-2 inline" />
+                Reprocessar versão atual
+              </Button>
+            ) : null}
+          </div>
+        )}
+      </Modal>
+      <Modal
         open={retentionOpen}
         title="Documentos em retenção"
         onClose={() => setRetentionOpen(false)}
@@ -369,6 +448,25 @@ export function DocumentsPage() {
       </Modal>
     </>
   );
+}
+
+function extractionTone(
+  status: DocumentExtraction["status"],
+): "slate" | "red" | "amber" | "green" | "blue" {
+  if (status === "succeeded") return "green";
+  if (status === "failed") return "red";
+  if (status === "pending" || status === "processing") return "blue";
+  return "amber";
+}
+
+function extractionLabel(status: DocumentExtraction["status"]) {
+  return {
+    pending: "Na fila",
+    processing: "Processando",
+    succeeded: "Texto disponível",
+    failed: "Falhou",
+    unsupported: "Formato não suportado",
+  }[status];
 }
 
 function formatBytes(value: number) {

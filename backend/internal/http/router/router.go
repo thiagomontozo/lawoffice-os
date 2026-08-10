@@ -75,6 +75,8 @@ func New(h *handlers.Handler, store *repository.Store, cfg config.Config, metric
 		a.With(appmw.Permission("document.delete", handlers.WriteError)).Get("/api/v1/documents/deleted", h.DeletedDocuments)
 		a.With(appmw.Permission("document.read", handlers.WriteError)).Get("/api/v1/documents/{id}/download", h.DownloadDocument)
 		a.With(appmw.Permission("document.read", handlers.WriteError)).Get("/api/v1/documents/{id}/versions", h.Versions)
+		a.With(appmw.Permission("document.read", handlers.WriteError)).Get("/api/v1/documents/{id}/extraction", h.DocumentExtraction)
+		a.With(appmw.Permission("document.update", handlers.WriteError)).Post("/api/v1/documents/{id}/extraction/reprocess", h.ReprocessDocument)
 		a.With(appmw.Permission("document.upload", handlers.WriteError)).Post("/api/v1/documents", h.UploadDocument)
 		a.With(appmw.Permission("document.upload", handlers.WriteError)).Post("/api/v1/documents/{id}/versions", h.AddVersion)
 		a.With(appmw.Permission("document.delete", handlers.WriteError)).Delete("/api/v1/documents/{id}", h.DeleteDocument)

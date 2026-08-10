@@ -84,6 +84,22 @@ export type DocumentItem = {
   deletedAt?: string;
   clientVisible: boolean;
 };
+export type DocumentExtraction = {
+  id: string;
+  documentId: string;
+  documentVersionId: string;
+  status: "pending" | "processing" | "succeeded" | "failed" | "unsupported";
+  provider?: string;
+  language?: string;
+  pageCount: number;
+  averageConfidence?: number;
+  attempts: number;
+  errorCode?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  pages: { pageNumber: number; content: string; confidence?: number }[];
+};
 export type MatterEvent = {
   id: string;
   type: string;

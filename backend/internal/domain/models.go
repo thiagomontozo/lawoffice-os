@@ -147,6 +147,32 @@ type DocumentVersion struct {
 	CreatedAt        time.Time `json:"createdAt"`
 	Notes            *string   `json:"notes,omitempty"`
 }
+type DocumentExtraction struct {
+	ID                string                   `json:"id"`
+	DocumentID        string                   `json:"documentId"`
+	DocumentVersionID string                   `json:"documentVersionId"`
+	Status            string                   `json:"status"`
+	Provider          *string                  `json:"provider,omitempty"`
+	Language          *string                  `json:"language,omitempty"`
+	PageCount         int                      `json:"pageCount"`
+	AverageConfidence *float64                 `json:"averageConfidence,omitempty"`
+	Attempts          int                      `json:"attempts"`
+	ErrorCode         *string                  `json:"errorCode,omitempty"`
+	CreatedAt         time.Time                `json:"createdAt"`
+	StartedAt         *time.Time               `json:"startedAt,omitempty"`
+	CompletedAt       *time.Time               `json:"completedAt,omitempty"`
+	Pages             []DocumentExtractionPage `json:"pages"`
+}
+type DocumentExtractionPage struct {
+	PageNumber int      `json:"pageNumber"`
+	Content    string   `json:"content"`
+	Confidence *float64 `json:"confidence,omitempty"`
+}
+type ClaimedDocumentExtraction struct {
+	ID, FirmID, DocumentID, DocumentVersionID string
+	StorageKey, MimeType, OriginalFileName    string
+	Attempts, MaxAttempts                     int
+}
 type Deadline struct {
 	ID           string     `json:"id"`
 	MatterID     string     `json:"matterId"`

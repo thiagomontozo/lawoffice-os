@@ -41,6 +41,14 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-pt-BR}
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/Sao_Paulo}
+      OCR_MODE: ${OCR_MODE:-off}
+      OCR_ENDPOINT: ${OCR_ENDPOINT:-}
+      OCR_TOKEN: ${OCR_TOKEN:-}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-pt-BR}
+      OCR_MAX_INPUT_MB: ${OCR_MAX_INPUT_MB:-25}
+      OCR_MAX_PAGES: ${OCR_MAX_PAGES:-1000}
+      OCR_MAX_CHARACTERS: ${OCR_MAX_CHARACTERS:-5000000}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-90}
     volumes: [document_storage:/data/storage]
     depends_on: {postgres: {condition: service_healthy}}
     restart: unless-stopped

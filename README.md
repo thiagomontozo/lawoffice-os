@@ -124,6 +124,10 @@ Metadata belongs to PostgreSQL; content belongs to object storage. Uploads are s
 
 Uploading a new version never silently overwrites the prior object. The current pointer advances transactionally while older versions remain downloadable according to the same authorization boundary. Deletion is a reversible metadata action; physical purge is a separate retention decision that must account for legal hold.
 
+## OCR and searchable document text
+
+Every immutable document version receives an asynchronous extraction record. The built-in provider handles TXT, DOCX and XLSX; a bounded HTTPS provider contract supports scanned PDF and image OCR. Text is stored per page with confidence metadata and PostgreSQL full-text indexes. Users can inspect status, review extracted pages and explicitly reprocess the current version. The original file remains authoritative. See [OCR and document extraction](docs/ocr.md).
+
 ## Deadlines and Tasks
 
 Deadlines support open/completed/cancelled states and operational urgency windows. Tasks may belong to a Matter or the firm, support assignee, priority and due date, and can later be created from workflow entry rules. V0.1 does **not** calculate procedural deadlines automatically.
@@ -298,7 +302,7 @@ Twelve ADRs in [`docs/decisions`](docs/decisions) cover the stack, modular monol
 - The automated suite is intentionally focused on critical foundations and does not yet cover every handler or React interaction.
 - SSE replay is durable for seven days and capped at 500 events per reconnect; clients that remain offline beyond that window must perform a full data refresh.
 - Local object storage still assumes a single shared filesystem. S3/MinIO and ClamAV adapters are available, but document previews and asynchronous quarantine review are not.
-- Search uses ranked PostgreSQL matching and indexed trigrams, but does not yet provide semantic search.
+- Search uses ranked PostgreSQL matching, indexed trigrams and extracted document text, but semantic retrieval is delivered in the RAG milestone rather than the OCR worker.
 - SMTP supports invitations, password recovery and opt-in deadline/task alerts through the durable queue. Bounce handling, digest scheduling and per-field portal sharing controls are not yet available.
 - The built-in abuse limiter is instance-local; production needs a distributed edge rate limiter. Metrics now provide a monitoring foundation, but alert delivery and dashboards remain deployment responsibilities.
 - Scheduler notification rules are basic and do not calculate legal procedural deadlines.

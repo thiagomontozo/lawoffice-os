@@ -8,6 +8,7 @@ data/
 uploads/
 documents/
 *.log
+.codex-tmp/
 *.tmp
 .idea/
 .vscode/

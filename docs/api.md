@@ -23,6 +23,7 @@ All errors use `{ "error": { "code", "message", "requestId" } }`. Internal endpo
 - `/api/v1/matters`, `/matters/:id`
 - `/api/v1/matters/:id/archive`, `/reopen`
 - `/api/v1/documents`, `/documents/:id/versions`, `/download`
+- `GET /api/v1/documents/:id/extraction` returns authorized current-version text pages; `POST /extraction/reprocess` reenqueues it.
 - `/api/v1/deadlines`, `/tasks`, `/calendar`, `/workflows`
 - `POST /api/v1/conflicts/check`
 - `GET /api/v1/search`, `/dashboard`, `/notifications`, `/stream`

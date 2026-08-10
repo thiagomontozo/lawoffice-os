@@ -16,10 +16,12 @@ type Config struct {
 	Environment, Port, DatabaseURL, WebOrigin, SessionSecret, MetricsToken, StoragePath, MigrationsDir, Locale, Timezone string
 	StorageDriver, S3Endpoint, S3Bucket, S3AccessKey, S3SecretKey, S3Region, UploadScanMode, ClamAVAddress               string
 	SMTPMode, SMTPAddress, SMTPUsername, SMTPPassword, SMTPFrom, SMTPFromName                                            string
+	OCRMode, OCREndpoint, OCRToken, OCRLanguage                                                                          string
 	JobEncryptionSecret                                                                                                  string
-	MaxUpload                                                                                                            int64
+	MaxUpload, OCRMaxInput                                                                                               int64
+	OCRMaxPages, OCRMaxCharacters                                                                                        int
 	LogLevel                                                                                                             slog.Level
-	SessionTTL                                                                                                           time.Duration
+	SessionTTL, OCRTimeout                                                                                               time.Duration
 	S3UseTLS, S3CreateBucket                                                                                             bool
 	SMTPRequireTLS                                                                                                       bool
 }
@@ -107,6 +109,43 @@ func Load() (Config, error) {
 		}
 		if c.Environment == "production" && (c.JobEncryptionSecret == "change-me" || len(c.JobEncryptionSecret) < 32) {
 			return c, errors.New("JOB_ENCRYPTION_SECRET must contain at least 32 characters in production when SMTP is enabled")
+		}
+	}
+	c.OCRMode = strings.ToLower(value("OCR_MODE", "off"))
+	c.OCREndpoint = strings.TrimSpace(os.Getenv("OCR_ENDPOINT"))
+	c.OCRToken = strings.TrimSpace(os.Getenv("OCR_TOKEN"))
+	c.OCRLanguage = value("OCR_LANGUAGE", "pt-BR")
+	if c.OCRMode != "off" && c.OCRMode != "builtin" && c.OCRMode != "http" {
+		return c, errors.New("OCR_MODE must be off, builtin or http")
+	}
+	ocrInputMB, parseErr := strconv.ParseInt(value("OCR_MAX_INPUT_MB", "25"), 10, 64)
+	if parseErr != nil || ocrInputMB < 1 || ocrInputMB > 100 {
+		return c, errors.New("OCR_MAX_INPUT_MB must be 1..100")
+	}
+	c.OCRMaxInput = ocrInputMB * 1024 * 1024
+	c.OCRMaxPages, parseErr = strconv.Atoi(value("OCR_MAX_PAGES", "1000"))
+	if parseErr != nil || c.OCRMaxPages < 1 || c.OCRMaxPages > 5000 {
+		return c, errors.New("OCR_MAX_PAGES must be 1..5000")
+	}
+	c.OCRMaxCharacters, parseErr = strconv.Atoi(value("OCR_MAX_CHARACTERS", "5000000"))
+	if parseErr != nil || c.OCRMaxCharacters < 1000 || c.OCRMaxCharacters > 20000000 {
+		return c, errors.New("OCR_MAX_CHARACTERS must be 1000..20000000")
+	}
+	ocrTimeoutSeconds, parseErr := strconv.Atoi(value("OCR_TIMEOUT_SECONDS", "90"))
+	if parseErr != nil || ocrTimeoutSeconds < 5 || ocrTimeoutSeconds > 300 {
+		return c, errors.New("OCR_TIMEOUT_SECONDS must be 5..300")
+	}
+	c.OCRTimeout = time.Duration(ocrTimeoutSeconds) * time.Second
+	if c.OCRMode == "http" {
+		ocrURL, urlErr := url.Parse(c.OCREndpoint)
+		if urlErr != nil || ocrURL.Host == "" || (ocrURL.Scheme != "http" && ocrURL.Scheme != "https") {
+			return c, errors.New("OCR_ENDPOINT must be an absolute HTTP(S) URL when OCR_MODE=http")
+		}
+		if c.Environment == "production" && ocrURL.Scheme != "https" {
+			return c, errors.New("OCR_ENDPOINT must use HTTPS in production")
+		}
+		if c.Environment == "production" && len(c.OCRToken) < 24 {
+			return c, errors.New("OCR_TOKEN must contain at least 24 characters in production")
 		}
 	}
 	c.StoragePath, e = filepath.Abs(c.StoragePath)
