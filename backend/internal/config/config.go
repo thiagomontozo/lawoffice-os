@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,9 +14,11 @@ import (
 
 type Config struct {
 	Environment, Port, DatabaseURL, WebOrigin, SessionSecret, MetricsToken, StoragePath, MigrationsDir, Locale, Timezone string
+	StorageDriver, S3Endpoint, S3Bucket, S3AccessKey, S3SecretKey, S3Region, UploadScanMode, ClamAVAddress               string
 	MaxUpload                                                                                                            int64
 	LogLevel                                                                                                             slog.Level
 	SessionTTL                                                                                                           time.Duration
+	S3UseTLS, S3CreateBucket                                                                                             bool
 }
 
 func Load() (Config, error) {
@@ -45,6 +48,36 @@ func Load() (Config, error) {
 		return c, errors.New("MAX_UPLOAD_MB must be 1..100")
 	}
 	c.MaxUpload = mb * 1024 * 1024
+	c.StorageDriver = strings.ToLower(value("STORAGE_DRIVER", "local"))
+	c.S3Endpoint = strings.TrimSpace(os.Getenv("S3_ENDPOINT"))
+	c.S3Bucket = strings.TrimSpace(os.Getenv("S3_BUCKET"))
+	c.S3AccessKey = strings.TrimSpace(os.Getenv("S3_ACCESS_KEY"))
+	c.S3SecretKey = strings.TrimSpace(os.Getenv("S3_SECRET_KEY"))
+	c.S3Region = value("S3_REGION", "us-east-1")
+	c.S3UseTLS, e = boolean("S3_USE_TLS", true)
+	if e != nil {
+		return c, e
+	}
+	c.S3CreateBucket, e = boolean("S3_CREATE_BUCKET", false)
+	if e != nil {
+		return c, e
+	}
+	if c.StorageDriver != "local" && c.StorageDriver != "s3" {
+		return c, errors.New("STORAGE_DRIVER must be local or s3")
+	}
+	if c.StorageDriver == "s3" && (c.S3Endpoint == "" || c.S3Bucket == "" || c.S3AccessKey == "" || c.S3SecretKey == "" || strings.Contains(c.S3Endpoint, "://")) {
+		return c, errors.New("S3_ENDPOINT without scheme, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY are required for S3 storage")
+	}
+	c.UploadScanMode = strings.ToLower(value("UPLOAD_SCAN_MODE", "off"))
+	c.ClamAVAddress = strings.TrimSpace(os.Getenv("CLAMAV_ADDRESS"))
+	if c.UploadScanMode != "off" && c.UploadScanMode != "required" {
+		return c, errors.New("UPLOAD_SCAN_MODE must be off or required")
+	}
+	if c.UploadScanMode == "required" {
+		if _, _, splitErr := net.SplitHostPort(c.ClamAVAddress); splitErr != nil {
+			return c, errors.New("CLAMAV_ADDRESS must be a host:port when upload scanning is required")
+		}
+	}
 	c.StoragePath, e = filepath.Abs(c.StoragePath)
 	if e != nil {
 		return c, e
@@ -56,6 +89,18 @@ func Load() (Config, error) {
 	}
 	c.LogLevel = level
 	return c, nil
+}
+
+func boolean(key string, fallback bool) (bool, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, errors.New(key + " must be true or false")
+	}
+	return parsed, nil
 }
 func value(k, d string) string {
 	if v := strings.TrimSpace(os.Getenv(k)); v != "" {

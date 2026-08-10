@@ -41,6 +41,10 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, 503, "NOT_READY", "Object storage unavailable")
 		return
 	}
+	if err := h.Service.Scanner.Health(ctx); err != nil {
+		WriteError(w, r, 503, "NOT_READY", "Upload security scanner unavailable")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 

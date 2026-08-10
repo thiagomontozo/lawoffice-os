@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/domain"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/repository"
+	"github.com/thiagomontozo/lawoffice-os/backend/internal/scanner"
 	"github.com/thiagomontozo/lawoffice-os/backend/internal/storage"
 	"io"
 	"mime/multipart"
@@ -24,11 +25,15 @@ var ErrValidation = errors.New("validation error")
 type Service struct {
 	Store     *repository.Store
 	Storage   storage.ObjectStorage
+	Scanner   scanner.Scanner
 	MaxUpload int64
 }
 
-func New(r *repository.Store, s storage.ObjectStorage, max int64) *Service {
-	return &Service{r, s, max}
+func New(r *repository.Store, s storage.ObjectStorage, uploadScanner scanner.Scanner, max int64) *Service {
+	if uploadScanner == nil {
+		uploadScanner = scanner.Disabled{}
+	}
+	return &Service{Store: r, Storage: s, Scanner: uploadScanner, MaxUpload: max}
 }
 func (s *Service) RequirePermission(ctx context.Context, firmID, userID, key string) error {
 	ok, e := s.Store.HasPermission(ctx, firmID, userID, key)
@@ -125,6 +130,21 @@ func (s *Service) storeUpload(ctx context.Context, firmID string, h *multipart.F
 		}
 	} else if provided != ext {
 		return "", "", "", 0, "", fmt.Errorf("%w: extension mismatch", ErrValidation)
+	}
+	scanFile, e := h.Open()
+	if e != nil {
+		return "", "", "", 0, "", e
+	}
+	scanErr := s.Scanner.Scan(ctx, io.LimitReader(scanFile, s.MaxUpload+1))
+	closeErr := scanFile.Close()
+	if errors.Is(scanErr, scanner.ErrThreat) {
+		return "", "", "", 0, "", fmt.Errorf("%w: upload rejected by security scan", ErrValidation)
+	}
+	if scanErr != nil {
+		return "", "", "", 0, "", fmt.Errorf("upload security scan unavailable: %w", scanErr)
+	}
+	if closeErr != nil {
+		return "", "", "", 0, "", closeErr
 	}
 	hasher := sha256.New()
 	counter := &countWriter{}

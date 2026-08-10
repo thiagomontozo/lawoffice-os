@@ -46,3 +46,25 @@ func TestOriginMustBeExact(t *testing.T) {
 		t.Fatal("origin with path should be rejected")
 	}
 }
+func TestS3ConfigurationRequiresCredentialsAndSchemeFreeEndpoint(t *testing.T) {
+	validEnvironment(t)
+	t.Setenv("STORAGE_DRIVER", "s3")
+	t.Setenv("S3_ENDPOINT", "https://objects.example")
+	t.Setenv("S3_BUCKET", "documents")
+	t.Setenv("S3_ACCESS_KEY", "access")
+	t.Setenv("S3_SECRET_KEY", "secret")
+	if _, err := Load(); err == nil {
+		t.Fatal("S3 endpoint with scheme should be rejected")
+	}
+}
+func TestRequiredUploadScannerNeedsAddress(t *testing.T) {
+	validEnvironment(t)
+	t.Setenv("UPLOAD_SCAN_MODE", "required")
+	if _, err := Load(); err == nil {
+		t.Fatal("required scanner without CLAMAV_ADDRESS should be rejected")
+	}
+	t.Setenv("CLAMAV_ADDRESS", "clamav:3310")
+	if _, err := Load(); err != nil {
+		t.Fatalf("valid scanner configuration rejected: %v", err)
+	}
+}
