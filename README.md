@@ -1,5 +1,9 @@
 # LawOffice OS
 
+[![CI](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/ci.yml)
+[![Security](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/security.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > White-label legal practice management platform built with Go, React and TypeScript.
 
 **Current status: Experimental.** LawOffice OS is a portfolio-grade systems and product engineering project. The repository now has initial automated tests and CI, but it is not production-ready and still requires deployment-specific security and operational validation.
