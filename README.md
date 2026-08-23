@@ -3,6 +3,12 @@
 [![CI](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/ci.yml)
 [![Security](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/thiagomontozo/lawoffice-os/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Status: Experimental](https://img.shields.io/badge/status-experimental-f59e0b)
+![Go backend](https://img.shields.io/badge/Go-backend-00ADD8?logo=go&logoColor=white)
+![React frontend](https://img.shields.io/badge/React-frontend-61DAFB?logo=react&logoColor=0b1f2a)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-primary_store-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-containerized-2496ED?logo=docker&logoColor=white)
 
 > White-label legal practice management platform built with Go, React and TypeScript.
 
